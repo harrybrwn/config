@@ -10,7 +10,7 @@ import (
 )
 
 // HasKey tests if the config struct has a key given
-func HasKey(key string) bool { return defaultConfig.HasKey(key) }
+func HasKey(key string) bool { return c.HasKey(key) }
 
 // HasKey tests if the config struct has a key given
 func (c *Config) HasKey(key string) bool {
@@ -18,7 +18,7 @@ func (c *Config) HasKey(key string) bool {
 }
 
 // Get will get a variable by key
-func Get(key string) interface{} { return defaultConfig.Get(key) }
+func Get(key string) interface{} { return c.Get(key) }
 
 // Get will get a variable by key
 func (c *Config) Get(key string) interface{} {
@@ -40,7 +40,7 @@ func (c *Config) get(key string) (reflect.Value, error) {
 
 // GetString will get the config value by name and
 // return it as a string
-func GetString(key string) string { return defaultConfig.GetString(key) }
+func GetString(key string) string { return c.GetString(key) }
 
 // GetString will get the config value by name and
 // return it as a string. This function will also expand
@@ -53,7 +53,7 @@ func (c *Config) GetString(key string) string {
 // GetStringErr is the same as get string but it returns an error
 // when something went wrong, mainly if the key does not exist
 func GetStringErr(key string) (string, error) {
-	return defaultConfig.GetStringErr(key)
+	return c.GetStringErr(key)
 }
 
 // GetStringErr is the same as get string but it returns an error
@@ -67,7 +67,7 @@ func (c *Config) GetStringErr(key string) (string, error) {
 }
 
 // GetInt will get the int value of a key
-func GetInt(key string) int { return defaultConfig.GetInt(key) }
+func GetInt(key string) int { return c.GetInt(key) }
 
 // GetInt will get the int value of a key
 func (c *Config) GetInt(key string) int {
@@ -77,9 +77,7 @@ func (c *Config) GetInt(key string) int {
 
 // GetIntErr will return an get an int but also return an error
 // if something went wrong, main just missing keys and conversion errors
-func GetIntErr(key string) (int, error) {
-	return defaultConfig.GetIntErr(key)
-}
+func GetIntErr(key string) (int, error) { return c.GetIntErr(key) }
 
 // GetIntErr will return an get an int but also return an error
 // if something went wrong, main just missing keys and conversion errors
@@ -92,7 +90,7 @@ func (c *Config) GetIntErr(key string) (int, error) {
 }
 
 // GetFloat will get a float64 value
-func GetFloat(key string) float64 { return defaultConfig.GetFloat(key) }
+func GetFloat(key string) float64 { return c.GetFloat(key) }
 
 // GetFloat will get a float64 value
 func (c *Config) GetFloat(key string) float64 {
@@ -104,7 +102,7 @@ func (c *Config) GetFloat(key string) float64 {
 }
 
 // GetFloat32 will get a float32 value
-func GetFloat32(key string) float32 { return defaultConfig.GetFloat32(key) }
+func GetFloat32(key string) float32 { return c.GetFloat32(key) }
 
 // GetFloat32 will get a float32 value
 func (c *Config) GetFloat32(key string) float32 {
@@ -116,7 +114,7 @@ func (c *Config) GetFloat32(key string) float32 {
 }
 
 // GetBool will get the boolean value at the given key
-func GetBool(key string) bool { return defaultConfig.GetBool(key) }
+func GetBool(key string) bool { return c.GetBool(key) }
 
 // GetBool will get the boolean value at the given key
 func (c *Config) GetBool(key string) bool {
@@ -128,7 +126,7 @@ func (c *Config) GetBool(key string) bool {
 }
 
 // GetIntSlice will get a slice of ints from a key
-func GetIntSlice(key string) []int { return defaultConfig.GetIntSlice(key) }
+func GetIntSlice(key string) []int { return c.GetIntSlice(key) }
 
 // GetIntSlice will get a slice of ints from a key
 //
@@ -149,7 +147,7 @@ func (c *Config) GetIntSlice(key string) []int {
 //
 // Warning: will panic if the key given does not
 // reference a []int64
-func GetInt64Slice(key string) []int64 { return defaultConfig.GetInt64Slice(key) }
+func GetInt64Slice(key string) []int64 { return c.GetInt64Slice(key) }
 
 // GetInt64Slice will return a slice of int64.
 //
@@ -168,7 +166,7 @@ func (c *Config) GetInt64Slice(key string) []int64 {
 
 // GetStringMap will get a map of string keys to string values
 func GetStringMap(key string) map[string]string {
-	return defaultConfig.GetStringMap(key)
+	return c.GetStringMap(key)
 }
 
 // GetStringMap will get a map of string keys to string values

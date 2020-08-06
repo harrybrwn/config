@@ -14,7 +14,7 @@ import (
 )
 
 func cleanup() {
-	defaultConfig = &Config{}
+	c = &Config{}
 }
 
 func TestPaths(t *testing.T) {
@@ -33,7 +33,7 @@ func TestPaths(t *testing.T) {
 		os.Setenv("USERPROFILE", os.TempDir())
 		os.Setenv("home", os.TempDir())
 		UseHomeDir("config_test")
-		if defaultConfig.paths[0] != filepath.Join(os.TempDir(), ".config_test") {
+		if c.paths[0] != filepath.Join(os.TempDir(), ".config_test") {
 			t.Error("home dir not set as a path")
 		}
 	})
@@ -56,18 +56,18 @@ func TestPaths(t *testing.T) {
 			exp = filepath.Join(os.TempDir(), ".config")
 		}
 		exp = filepath.Join(exp, "config_test")
-		if defaultConfig.paths[0] != exp {
-			t.Errorf("expected %s; got %s", exp, defaultConfig.paths[0])
+		if c.paths[0] != exp {
+			t.Errorf("expected %s; got %s", exp, c.paths[0])
 		}
-		defaultConfig.paths = []string{}
+		c.paths = []string{}
 		UseDefaultDirs("config_test")
-		if defaultConfig.paths[0] != exp {
+		if c.paths[0] != exp {
 			t.Error("home dir not set as a path")
 		}
 	})
 	SetStruct(&C{})
 	AddPath("$HOME")
-	if defaultConfig.paths[0] != os.TempDir() {
+	if c.paths[0] != os.TempDir() {
 		t.Error("AddPath did set the wrong path")
 	}
 }
@@ -90,18 +90,18 @@ func TestFileTypes(t *testing.T) {
 	if err = SetType("yml"); err != nil {
 		t.Error(err)
 	}
-	matchFn("gopkg.in/yaml.v2.Unmarshal", defaultConfig.unmarshal)
-	matchFn("gopkg.in/yaml.v2.Marshal", defaultConfig.marshal)
+	matchFn("gopkg.in/yaml.v2.Unmarshal", c.unmarshal)
+	matchFn("gopkg.in/yaml.v2.Marshal", c.marshal)
 	if err = SetType("yaml"); err != nil {
 		t.Error(err)
 	}
-	matchFn("gopkg.in/yaml.v2.Unmarshal", defaultConfig.unmarshal)
-	matchFn("gopkg.in/yaml.v2.Marshal", defaultConfig.marshal)
+	matchFn("gopkg.in/yaml.v2.Unmarshal", c.unmarshal)
+	matchFn("gopkg.in/yaml.v2.Marshal", c.marshal)
 	if err = SetType("json"); err != nil {
 		t.Error("err")
 	}
-	matchFn("encoding/json.Unmarshal", defaultConfig.unmarshal)
-	matchFn("encoding/json.Marshal", defaultConfig.marshal)
+	matchFn("encoding/json.Unmarshal", c.unmarshal)
+	matchFn("encoding/json.Marshal", c.marshal)
 }
 
 func TestReadConfig_Err(t *testing.T) {
@@ -141,9 +141,9 @@ func TestGet(t *testing.T) {
 		S string `config:"a-string"`
 	}
 	conf := &C{"this is a test"}
-	c := New(conf)
-	c.SetFilename("test.txt")
-	ires := c.Get("a-string")
+	cfg := New(conf)
+	cfg.SetFilename("test.txt")
+	ires := cfg.Get("a-string")
 	s, ok := ires.(string)
 	if !ok {
 		t.Error("should have returned a string")
@@ -152,7 +152,7 @@ func TestGet(t *testing.T) {
 		t.Errorf("expected %s; got %s", conf.S, s)
 	}
 	// testing the panic in Config.get
-	defaultConfig = &Config{}
+	c = &Config{}
 	defer func() {
 		r := recover()
 		if r == nil {

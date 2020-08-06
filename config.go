@@ -24,12 +24,12 @@ var (
 	// ErrWrongType is returned when the wrong type is used
 	ErrWrongType = errors.New("wrong type")
 
-	defaultConfig *Config
-	nilval        = reflect.ValueOf(nil)
+	c      *Config
+	nilval = reflect.ValueOf(nil)
 )
 
 func init() {
-	defaultConfig = &Config{}
+	c = &Config{}
 }
 
 // New creates a new config object from a configuration
@@ -54,14 +54,22 @@ type Config struct {
 }
 
 // SetStruct will set the config struct
-func SetStruct(conf interface{}) {
-	defaultConfig.SetStruct(conf)
-}
+func SetStruct(conf interface{}) { c.SetStruct(conf) }
 
 // SetStruct will set the config struct
 func (c *Config) SetStruct(conf interface{}) {
 	c.config = conf
 	c.elem = reflect.ValueOf(conf).Elem()
+}
+
+// GetStruct will return the the config struct that has been
+// set by the user but as an interface type.
+func GetStruct() interface{} { return c.GetStruct() }
+
+// GetStruct will return the the config struct that has been
+// set by the user but as an interface type.
+func (c *Config) GetStruct() interface{} {
+	return c.config
 }
 
 // UseDefaultDirs sets the config and home directories as possible
@@ -71,9 +79,7 @@ func (c *Config) SetStruct(conf interface{}) {
 // <config dir>/<name> is added to the list of possible config paths.
 // If the home dir is found (see os.UserHomeDir) then
 // <home dir>/<name> is added to the list of possible config paths.
-func UseDefaultDirs(name string) {
-	defaultConfig.UseDefaultDirs(name)
-}
+func UseDefaultDirs(name string) { c.UseDefaultDirs(name) }
 
 // UseDefaultDirs sets the config and home directories as possible
 // config dir options.
@@ -100,9 +106,7 @@ func (c *Config) UseDefaultDirs(name string) {
 // UseConfigDir will add a config dir using the user config dir
 // (see os.UserConfigDir) and join it with the name given.
 //	$XDG_CONFIG_DIR/<name>
-func UseConfigDir(name string) {
-	defaultConfig.UseConfigDir(name)
-}
+func UseConfigDir(name string) { c.UseConfigDir(name) }
 
 // UseConfigDir will add a config dir using the user config dir
 // (see os.UserConfigDir) and join it with the name given.
@@ -118,9 +122,7 @@ func (c *Config) UseConfigDir(name string) {
 // UseHomeDir will add a config dir using the user home dir
 // (see os.UserHomeDir) and join it with the name given and a "."
 //	$HOME/.<name>
-func UseHomeDir(name string) {
-	defaultConfig.UseHomeDir(name)
-}
+func UseHomeDir(name string) { c.UseHomeDir(name) }
 
 // UseHomeDir will add a config dir using the user home dir
 // (see os.UserHomeDir) and join it with the name given and a "."
@@ -134,9 +136,7 @@ func (c *Config) UseHomeDir(name string) {
 }
 
 // SetType will set the file type of config being used.
-func SetType(ext string) error {
-	return defaultConfig.SetType(ext)
-}
+func SetType(ext string) error { return c.SetType(ext) }
 
 // SetType will set the file type of config being used.
 func (c *Config) SetType(ext string) error {
@@ -154,9 +154,7 @@ func (c *Config) SetType(ext string) error {
 }
 
 // ReadConfigFile will read in the config file
-func ReadConfigFile() error {
-	return defaultConfig.ReadConfigFile()
-}
+func ReadConfigFile() error { return c.ReadConfigFile() }
 
 // ReadConfigFile will read in the config file
 func (c *Config) ReadConfigFile() error {
@@ -179,9 +177,7 @@ func (c *Config) ReadConfigFile() error {
 
 // FileUsed will return the file used for
 // configuration.
-func FileUsed() string {
-	return defaultConfig.FileUsed()
-}
+func FileUsed() string { return c.FileUsed() }
 
 // FileUsed will return the file used for
 // configuration.
@@ -195,9 +191,7 @@ func (c *Config) FileUsed() string {
 
 // DirUsed returns the path of the first existing
 // config directory.
-func DirUsed() string {
-	return defaultConfig.DirUsed()
-}
+func DirUsed() string { return c.DirUsed() }
 
 // DirUsed returns the path of the first existing
 // config directory.
@@ -212,9 +206,7 @@ func (c *Config) DirUsed() string {
 }
 
 // SetFilename sets the config filename.
-func SetFilename(name string) {
-	defaultConfig.SetFilename(name)
-}
+func SetFilename(name string) { c.SetFilename(name) }
 
 // SetFilename sets the config filename.
 func (c *Config) SetFilename(name string) {
@@ -223,9 +215,7 @@ func (c *Config) SetFilename(name string) {
 
 // AddPath will add a path the the list of possible
 // configuration folders
-func AddPath(path string) {
-	defaultConfig.AddPath(path)
-}
+func AddPath(path string) { c.AddPath(path) }
 
 // AddPath will add a path the the list of possible
 // configuration folders
