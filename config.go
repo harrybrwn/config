@@ -72,14 +72,14 @@ func (c *Config) GetConfig() interface{} {
 	return c.config
 }
 
-// UseDefaultDirs sets the config and home directories as possible
+// AddDefaultDirs sets the config and home directories as possible
 // config dir options.
 //
 // If the config dir is found (see os.UserConfigDir) then
 // <config dir>/<name> is added to the list of possible config paths.
 // If the home dir is found (see os.UserHomeDir) then
 // <home dir>/<name> is added to the list of possible config paths.
-func UseDefaultDirs(name string) { c.UseDefaultDirs(name) }
+func AddDefaultDirs(name string) { c.UseDefaultDirs(name) }
 
 // UseDefaultDirs sets the config and home directories as possible
 // config dir options.
@@ -103,15 +103,15 @@ func (c *Config) UseDefaultDirs(name string) {
 	}
 }
 
-// UseConfigDir will add a config dir using the user config dir
+// AddConfigDir will add a config dir using the user config dir
 // (see os.UserConfigDir) and join it with the name given.
 //	$XDG_CONFIG_DIR/<name>
-func UseConfigDir(name string) error { return c.UseConfigDir(name) }
+func AddConfigDir(name string) error { return c.AddConfigDir(name) }
 
-// UseConfigDir will add a config dir using the user config dir
+// AddConfigDir will add a config dir using the user config dir
 // (see os.UserConfigDir) and join it with the name given.
 //	$XDG_CONFIG_DIR/<name>
-func (c *Config) UseConfigDir(name string) error {
+func (c *Config) AddConfigDir(name string) error {
 	dir, err := os.UserConfigDir()
 	if err == nil {
 		c.paths = append(c.paths, filepath.Join(dir, name))
@@ -119,15 +119,15 @@ func (c *Config) UseConfigDir(name string) error {
 	return err
 }
 
-// UseHomeDir will add a config dir using the user home dir
+// AddHomeDir will add a config dir using the user home dir
 // (see os.UserHomeDir) and join it with the name given and a "."
 //	$HOME/.<name>
-func UseHomeDir(name string) error { return c.UseHomeDir(name) }
+func AddHomeDir(name string) error { return c.AddHomeDir(name) }
 
-// UseHomeDir will add a config dir using the user home dir
+// AddHomeDir will add a config dir using the user home dir
 // (see os.UserHomeDir) and join it with the name given and a "."
 //	$HOME/.<name>
-func (c *Config) UseHomeDir(name string) error {
+func (c *Config) AddHomeDir(name string) error {
 	dir, err := os.UserHomeDir()
 	if err == nil {
 		c.paths = append(c.paths, filepath.Join(dir, "."+name))

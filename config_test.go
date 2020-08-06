@@ -33,7 +33,7 @@ func TestPaths(t *testing.T) {
 		os.Setenv("HOME", os.TempDir())
 		os.Setenv("USERPROFILE", os.TempDir())
 		os.Setenv("home", os.TempDir())
-		if err := UseHomeDir("config_test"); err != nil {
+		if err := AddHomeDir("config_test"); err != nil {
 			t.Error(err)
 		}
 		if c.paths[0] != filepath.Join(os.TempDir(), ".config_test") {
@@ -46,7 +46,7 @@ func TestPaths(t *testing.T) {
 		SetConfig(&C{})
 		os.Setenv("XDG_CONFIG_HOME", filepath.Join(os.TempDir(), ".config"))
 		os.Setenv("AppData", os.TempDir())
-		if err := UseConfigDir("config_test"); err != nil {
+		if err := AddConfigDir("config_test"); err != nil {
 			t.Error(err)
 		}
 		var exp string
@@ -65,7 +65,7 @@ func TestPaths(t *testing.T) {
 			t.Errorf("expected %s; got %s", exp, c.paths[0])
 		}
 		c.paths = []string{}
-		UseDefaultDirs("config_test")
+		AddDefaultDirs("config_test")
 		if c.paths[0] != exp {
 			t.Error("home dir not set as a path")
 		}
