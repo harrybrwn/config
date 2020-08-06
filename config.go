@@ -53,22 +53,22 @@ type Config struct {
 	elem   reflect.Value
 }
 
-// SetStruct will set the config struct
-func SetStruct(conf interface{}) { c.SetStruct(conf) }
+// SetConfig will set the config struct
+func SetConfig(conf interface{}) { c.SetConfig(conf) }
 
-// SetStruct will set the config struct
-func (c *Config) SetStruct(conf interface{}) {
+// SetConfig will set the config struct
+func (c *Config) SetConfig(conf interface{}) {
 	c.config = conf
 	c.elem = reflect.ValueOf(conf).Elem()
 }
 
-// GetStruct will return the the config struct that has been
+// GetConfig will return the the config struct that has been
 // set by the user but as an interface type.
-func GetStruct() interface{} { return c.GetStruct() }
+func GetConfig() interface{} { return c.GetConfig() }
 
-// GetStruct will return the the config struct that has been
+// GetConfig will return the the config struct that has been
 // set by the user but as an interface type.
-func (c *Config) GetStruct() interface{} {
+func (c *Config) GetConfig() interface{} {
 	return c.config
 }
 
@@ -106,33 +106,33 @@ func (c *Config) UseDefaultDirs(name string) {
 // UseConfigDir will add a config dir using the user config dir
 // (see os.UserConfigDir) and join it with the name given.
 //	$XDG_CONFIG_DIR/<name>
-func UseConfigDir(name string) { c.UseConfigDir(name) }
+func UseConfigDir(name string) error { return c.UseConfigDir(name) }
 
 // UseConfigDir will add a config dir using the user config dir
 // (see os.UserConfigDir) and join it with the name given.
 //	$XDG_CONFIG_DIR/<name>
-func (c *Config) UseConfigDir(name string) {
+func (c *Config) UseConfigDir(name string) error {
 	dir, err := os.UserConfigDir()
-	if err != nil {
-		return
+	if err == nil {
+		c.paths = append(c.paths, filepath.Join(dir, name))
 	}
-	c.paths = append(c.paths, filepath.Join(dir, name))
+	return err
 }
 
 // UseHomeDir will add a config dir using the user home dir
 // (see os.UserHomeDir) and join it with the name given and a "."
 //	$HOME/.<name>
-func UseHomeDir(name string) { c.UseHomeDir(name) }
+func UseHomeDir(name string) error { return c.UseHomeDir(name) }
 
 // UseHomeDir will add a config dir using the user home dir
 // (see os.UserHomeDir) and join it with the name given and a "."
 //	$HOME/.<name>
-func (c *Config) UseHomeDir(name string) {
+func (c *Config) UseHomeDir(name string) error {
 	dir, err := os.UserHomeDir()
-	if err != nil {
-		return
+	if err == nil {
+		c.paths = append(c.paths, filepath.Join(dir, "."+name))
 	}
-	c.paths = append(c.paths, filepath.Join(dir, "."+name))
+	return err
 }
 
 // SetType will set the file type of config being used.

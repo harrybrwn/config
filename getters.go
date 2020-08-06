@@ -9,6 +9,8 @@ import (
 	"strings"
 )
 
+var errElemNotSet = errors.New("Config.elem not set, use config.New() or config.SetStruct()")
+
 // HasKey tests if the config struct has a key given
 func HasKey(key string) bool { return c.HasKey(key) }
 
@@ -29,9 +31,23 @@ func (c *Config) Get(key string) interface{} {
 	return val.Interface()
 }
 
+// GetErr will get the value stored at some key and return an error
+// if something went wrong.
+func GetErr(key string) (interface{}, error) { return c.GetErr(key) }
+
+// GetErr will get the value stored at some key and return an error
+// if something went wrong.
+func (c *Config) GetErr(key string) (interface{}, error) {
+	val, err := c.get(key)
+	if err != nil {
+		return nil, err
+	}
+	return val.Interface(), nil
+}
+
 func (c *Config) get(key string) (reflect.Value, error) {
 	if c.elem.Kind() == reflect.Invalid {
-		panic("config.elem not set, use config.New or config.SetStruct")
+		panic(errElemNotSet)
 	}
 	keys := strings.Split(key, ".")
 	_, _, val, err := find(c.elem, keys)
@@ -123,6 +139,22 @@ func (c *Config) GetBool(key string) bool {
 		return false
 	}
 	return val.Bool()
+}
+
+// GetBoolErr will get a boolean value but return an error
+// is something went wrong.
+func GetBoolErr(key string) (bool, error) {
+	return c.GetBoolErr(key)
+}
+
+// GetBoolErr will get a boolean value but return an error
+// is something went wrong.
+func (c *Config) GetBoolErr(key string) (bool, error) {
+	val, err := c.get(key)
+	if err != nil {
+		return false, err
+	}
+	return val.Bool(), nil
 }
 
 // GetIntSlice will get a slice of ints from a key
