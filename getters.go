@@ -19,6 +19,25 @@ func (c *Config) HasKey(key string) bool {
 	return hasKey(c.elem, strings.Split(key, "."))
 }
 
+// IsEmpty returns true if the value stored at some
+// key is a zero value or an empty value
+func IsEmpty(key string) bool {
+	return c.IsEmpty(key)
+}
+
+// IsEmpty returns true if the value stored at some
+// key is a zero value or an empty value
+func (c *Config) IsEmpty(key string) bool {
+	val, err := c.get(key)
+	if err != nil {
+		return true
+	}
+	if !val.IsValid() {
+		return false
+	}
+	return val.IsZero()
+}
+
 // Get will get a variable by key
 func Get(key string) interface{} { return c.Get(key) }
 
@@ -50,7 +69,7 @@ func (c *Config) get(key string) (reflect.Value, error) {
 		panic(errElemNotSet)
 	}
 	keys := strings.Split(key, ".")
-	_, _, val, err := find(c.elem, keys)
+	val, err := find(c.elem, keys)
 	return val, err
 }
 
@@ -226,7 +245,7 @@ func (c *Config) GetStringMap(key string) map[string]string {
 	return m
 }
 
-func find(val reflect.Value, keyPath []string) (bool, *reflect.StructField, reflect.Value, error) {
+func find(val reflect.Value, keyPath []string) (reflect.Value, error) {
 	var err error
 	typ := val.Type()
 	n := typ.NumField()
@@ -240,22 +259,24 @@ func find(val reflect.Value, keyPath []string) (bool, *reflect.StructField, refl
 			}
 			if !isZero(value) {
 				// if the field has been set then we return it
-				return true, &typFld, value, nil
+				return value, nil
 			}
 
-			value, err = getDefaultValue(&typFld, &value)
+			defvalue, err := getDefaultValue(&typFld, &value)
 			switch err {
-			case nil, errNoDefaultValue:
-				return true, &typFld, value, nil
+			case errNoDefaultValue:
+				return value, nil
+			case nil:
+				return defvalue, nil
 			default: // err != nil
-				return false, &typFld, nilval, err
+				return defvalue, err
 			}
 		}
 	}
 	if err == nil {
 		err = ErrFieldNotFound
 	}
-	return false, nil, nilval, err
+	return nilval, err
 }
 
 func hasKey(val reflect.Value, keyPath []string) bool {
@@ -384,7 +405,7 @@ func getDefaultValue(fld *reflect.StructField, fldval *reflect.Value) (def refle
 	case reflect.Complex128:
 	case reflect.Func:
 	default:
-		return nilval, nil
+		return nilval, errors.New("unknown default config type")
 	}
 	if err != nil {
 		return nilval, fmt.Errorf("could not parse default value: %v", err)
@@ -408,12 +429,9 @@ func isZero(val reflect.Value) bool {
 
 func set(obj interface{}, key string, val interface{}) error {
 	objval := reflect.ValueOf(obj).Elem()
-	ok, _, field, err := find(objval, strings.Split(key, "."))
+	field, err := find(objval, strings.Split(key, "."))
 	if err != nil {
 		return err
-	}
-	if !ok {
-		return ErrFieldNotFound
 	}
 	if !field.CanSet() {
 		return errors.New("cannot set value")

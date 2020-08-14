@@ -56,7 +56,11 @@ func SetConfig(conf interface{}) error { return c.SetConfig(conf) }
 // SetConfig will set the config struct
 func (c *Config) SetConfig(conf interface{}) error {
 	c.config = conf
-	c.elem = reflect.ValueOf(conf).Elem()
+
+	c.elem = reflect.ValueOf(conf)
+	if c.elem.Kind() == reflect.Ptr {
+		c.elem = c.elem.Elem()
+	}
 	return nil
 }
 

@@ -19,6 +19,9 @@ var pi string
 func init()    { pi = strconv.FormatFloat(math.Pi, 'f', 15, 64) }
 func cleanup() { c = &Config{} }
 
+func Test(t *testing.T) {
+}
+
 func TestPaths(t *testing.T) {
 	defer cleanup()
 	os.Setenv("XDG_CONFIG_HOME", filepath.Join(os.TempDir(), ".config"))
@@ -167,7 +170,7 @@ func TestGet(t *testing.T) {
 	type C struct {
 		S string `config:"a-string"`
 	}
-	conf := &C{"this is a test"}
+	conf := C{"this is a test"}
 	cfg := New(conf)
 	cfg.SetFilename("test.txt")
 	ires := cfg.Get("a-string")
@@ -484,5 +487,38 @@ func TestSet(t *testing.T) {
 	}
 	if conf.C != 99.99i {
 		t.Error("did not set the correct value")
+	}
+}
+
+func TestIsEmpty(t *testing.T) {
+	defer cleanup()
+	type C struct {
+		M      map[string]string `config:"map"`
+		Notmap int               `config:"not-map"`
+		S      string            `config:"s"`
+		I      int               `config:"i"`
+	}
+	conf := &C{}
+	SetConfig(conf)
+	if !IsEmpty("s") {
+		t.Error("should be empty")
+	}
+	if !IsEmpty("i") {
+		t.Error("should be empty")
+	}
+	if !IsEmpty("map") {
+		t.Error("should be empty")
+	}
+	conf.I = 1
+	conf.S = "hello"
+	conf.M = map[string]string{"a": "b"}
+	if IsEmpty("s") {
+		t.Error("should not be empty")
+	}
+	if IsEmpty("i") {
+		t.Error("should not be empty")
+	}
+	if IsEmpty("map") {
+		t.Error("should not be empty")
 	}
 }
