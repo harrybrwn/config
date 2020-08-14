@@ -6,9 +6,11 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"reflect"
 
+	"github.com/spf13/cobra"
 	"gopkg.in/yaml.v2"
 )
 
@@ -234,4 +236,51 @@ func AddPath(path string) { c.AddPath(path) }
 // configuration folders
 func (c *Config) AddPath(path string) {
 	c.paths = append(c.paths, os.ExpandEnv(path))
+}
+
+// NewConfigCommand creates a new cobra command for configuration
+func NewConfigCommand() *cobra.Command {
+	var file, edit bool
+	cmd := &cobra.Command{
+		Use:     "config",
+		Short:   "Manage configuration variables.",
+		Long:    `The config command helps manage program configuration variables.`,
+		Aliases: []string{"conf"},
+		RunE: func(cmd *cobra.Command, args []string) error {
+			f := FileUsed()
+			if file {
+				fmt.Println(f)
+				return nil
+			}
+			if edit {
+				if f == "" {
+					return errors.New("no config file found")
+				}
+				editor := GetString("editor")
+				if editor == "" {
+					envEditor := os.Getenv("EDITOR")
+					if envEditor == "" {
+						return errors.New("no editor set (use $EDITOR or set it in the config)")
+					}
+					editor = envEditor
+				}
+				ex := exec.Command(editor, f)
+				ex.Stdout = cmd.OutOrStdout()
+				ex.Stderr = cmd.ErrOrStderr()
+				ex.Stdin = cmd.InOrStdin()
+				return ex.Run()
+			}
+			return cmd.Usage()
+		},
+	}
+	cmd.AddCommand(&cobra.Command{
+		Use: "get", Short: "Get a config variable",
+		Run: func(c *cobra.Command, args []string) {
+			for _, arg := range args {
+				c.Printf("%+v\n", Get(arg))
+			}
+		}})
+	cmd.Flags().BoolVarP(&edit, "edit", "e", false, "edit the config file")
+	cmd.Flags().BoolVarP(&file, "file", "f", false, "print the config file path")
+	return cmd
 }
