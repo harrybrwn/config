@@ -139,6 +139,16 @@ func (c *Config) AddHomeDir(name string) error {
 	return err
 }
 
+// HomeDir will get the user's home directory
+func HomeDir() string {
+	sudouser := os.Getenv("SUDO_USER")
+	if sudouser != "" {
+		return filepath.Join("/home", sudouser)
+	}
+	home, _ := os.UserHomeDir()
+	return home
+}
+
 // SetType will set the file type of config being used.
 func SetType(ext string) error { return c.SetType(ext) }
 
@@ -240,7 +250,7 @@ func (c *Config) AddPath(path string) {
 
 // NewConfigCommand creates a new cobra command for configuration
 func NewConfigCommand() *cobra.Command {
-	var file, edit bool
+	var file, dir, edit bool
 	cmd := &cobra.Command{
 		Use:     "config",
 		Short:   "Manage configuration variables.",
@@ -249,7 +259,11 @@ func NewConfigCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			f := FileUsed()
 			if file {
-				fmt.Println(f)
+				cmd.Println(f)
+				return nil
+			}
+			if dir {
+				cmd.Println(DirUsed())
 				return nil
 			}
 			if edit {
@@ -282,5 +296,6 @@ func NewConfigCommand() *cobra.Command {
 		}})
 	cmd.Flags().BoolVarP(&edit, "edit", "e", false, "edit the config file")
 	cmd.Flags().BoolVarP(&file, "file", "f", false, "print the config file path")
+	cmd.Flags().BoolVarP(&dir, "dir", "d", false, "print the config directory")
 	return cmd
 }

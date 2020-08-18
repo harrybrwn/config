@@ -98,7 +98,17 @@ func (c *Config) GetStringErr(key string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	return os.ExpandEnv(val.String()), nil
+	return val.String(), nil
+}
+
+// Getenv wraps GetString with os.ExpandEnv
+func Getenv(key string) string {
+	return c.Getenv(key)
+}
+
+// Getenv wraps GetString with os.ExpandEnv
+func (c *Config) Getenv(key string) string {
+	return os.ExpandEnv(c.GetString(key))
 }
 
 // GetInt will get the int value of a key
