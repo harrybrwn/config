@@ -76,6 +76,24 @@ func (c *Config) GetConfig() interface{} {
 	return c.config
 }
 
+// AddPath will add a path the the list of possible
+// configuration folders
+func AddPath(path string) { c.AddPath(path) }
+
+// AddPath will add a path the the list of possible
+// configuration folders
+func (c *Config) AddPath(path string) {
+	c.paths = append(c.paths, os.ExpandEnv(path))
+}
+
+// Paths returns the slice of folder paths that
+// will be searched when looking for a config file.
+func Paths() []string { return c.Paths() }
+
+// Paths returns the slice of folder paths that
+// will be searched when looking for a config file.
+func (c *Config) Paths() []string { return c.paths }
+
 // AddDefaultDirs sets the config and home directories as possible
 // config dir options.
 //
@@ -190,16 +208,19 @@ func (c *Config) ReadConfigFile() error {
 }
 
 // FileUsed will return the file used for
-// configuration.
+// configuration. If no existing config directory is
+// found then this will return an empty string.
 func FileUsed() string { return c.FileUsed() }
 
 // FileUsed will return the file used for
-// configuration.
+// configuration. If no existing config file is
+// found then this will return an empty string.
 func (c *Config) FileUsed() string {
-	var err error
+	var file string
 	for _, path := range c.paths {
-		if _, err = os.Stat(path); !os.IsNotExist(err) {
-			return filepath.Join(path, c.file)
+		file = filepath.Join(path, c.file)
+		if exists(file) {
+			return file
 		}
 	}
 	return ""
@@ -213,15 +234,15 @@ func DirUsed() string { return c.DirUsed() }
 // config directory. If none of the paths exist, then
 // The first non-empty path will be returned.
 func (c *Config) DirUsed() string {
-	var (
-		err  error
-		path string
-	)
+	var path string
 	for _, path = range c.paths {
-		if _, err = os.Stat(path); !os.IsNotExist(err) {
+		// find the first path that exists
+		if exists(path) {
 			return path
 		}
 	}
+	// If none of the paths exist, return
+	// the first non-empty path.
 	for _, path = range c.paths {
 		if path != "" {
 			return path
@@ -230,22 +251,17 @@ func (c *Config) DirUsed() string {
 	return ""
 }
 
+func exists(p string) bool {
+	_, err := os.Stat(p)
+	return !os.IsNotExist(err)
+}
+
 // SetFilename sets the config filename.
 func SetFilename(name string) { c.SetFilename(name) }
 
 // SetFilename sets the config filename.
 func (c *Config) SetFilename(name string) {
 	c.file = name
-}
-
-// AddPath will add a path the the list of possible
-// configuration folders
-func AddPath(path string) { c.AddPath(path) }
-
-// AddPath will add a path the the list of possible
-// configuration folders
-func (c *Config) AddPath(path string) {
-	c.paths = append(c.paths, os.ExpandEnv(path))
 }
 
 // NewConfigCommand creates a new cobra command for configuration
