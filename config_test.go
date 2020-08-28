@@ -133,7 +133,7 @@ func TestReadConfig_Err(t *testing.T) {
 	if dirused := DirUsed(); dirused != "/tmp/some/path" {
 		t.Error("DirUsed should be the first non-empty path if none exist")
 	}
-	if err = ReadConfigFile(); err != ErrNoConfigDir {
+	if err = ReadConfigFile(); err != ErrNoConfigFile {
 		t.Error("should return the 'no config dir' error")
 	}
 
@@ -149,7 +149,7 @@ func TestReadConfig_Err(t *testing.T) {
 	check(SetType("yml"))
 	err = ReadConfigFile()
 	if err != ErrNoConfigFile {
-		t.Error("exected the 'no config file' error")
+		t.Errorf("exected the 'no config file' error; got '%v'", err)
 	}
 	fake := filepath.Join(dir, "config")
 	check(os.Mkdir(fake, 0700))

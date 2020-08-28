@@ -190,14 +190,8 @@ func ReadConfigFile() error { return c.ReadConfigFile() }
 
 // ReadConfigFile will read in the config file
 func (c *Config) ReadConfigFile() error {
-	filename := c.FileUsed()
-	if filename == "" {
-		return ErrNoConfigDir
-	}
-	stat, err := os.Stat(filename)
-	if os.IsNotExist(err) || stat.IsDir() {
-		return ErrNoConfigFile
-	} else if err != nil {
+	filename, err := c.findFile()
+	if err != nil {
 		return err
 	}
 	raw, err := ioutil.ReadFile(filename)
@@ -216,14 +210,19 @@ func FileUsed() string { return c.FileUsed() }
 // configuration. If no existing config file is
 // found then this will return an empty string.
 func (c *Config) FileUsed() string {
+	f, _ := c.findFile()
+	return f
+}
+
+func (c *Config) findFile() (string, error) {
 	var file string
 	for _, path := range c.paths {
 		file = filepath.Join(path, c.file)
-		if exists(file) {
-			return file
+		if fileExists(file) {
+			return file, nil
 		}
 	}
-	return ""
+	return "", ErrNoConfigFile
 }
 
 // DirUsed returns the path of the first existing
@@ -231,7 +230,8 @@ func (c *Config) FileUsed() string {
 func DirUsed() string { return c.DirUsed() }
 
 // DirUsed returns the path of the first existing
-// config directory. If none of the paths exist, then
+// config directory.
+// If none of the paths exist, then
 // The first non-empty path will be returned.
 func (c *Config) DirUsed() string {
 	var path string
@@ -254,6 +254,11 @@ func (c *Config) DirUsed() string {
 func exists(p string) bool {
 	_, err := os.Stat(p)
 	return !os.IsNotExist(err)
+}
+
+func fileExists(p string) bool {
+	stat, err := os.Stat(p)
+	return !os.IsNotExist(err) && !stat.IsDir()
 }
 
 // SetFilename sets the config filename.
