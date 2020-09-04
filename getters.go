@@ -354,60 +354,67 @@ func getDefaultValue(fld *reflect.StructField, fldval *reflect.Value) (def refle
 	if val == "" {
 		return nilval, errNoDefaultValue
 	}
+	return valueFromString(val, fld, fldval)
+}
 
+func valueFromString(
+	val string,
+	fld *reflect.StructField,
+	fldval *reflect.Value,
+) (result reflect.Value, err error) {
 	var (
 		ival  int64
 		uival uint64
 		fval  float64
 	)
+
 	switch fld.Type.Kind() {
 	case reflect.String:
 		return reflect.ValueOf(val), nil
 	case reflect.Int:
 		ival, err = strconv.ParseInt(val, 10, 64)
-		def = reflect.ValueOf(int(ival))
+		result = reflect.ValueOf(int(ival))
 	case reflect.Int8:
 		ival, err = strconv.ParseInt(val, 10, 8)
-		def = reflect.ValueOf(int8(ival))
+		result = reflect.ValueOf(int8(ival))
 	case reflect.Int16:
 		ival, err = strconv.ParseInt(val, 10, 16)
-		def = reflect.ValueOf(int16(ival))
+		result = reflect.ValueOf(int16(ival))
 	case reflect.Int32:
 		ival, err = strconv.ParseInt(val, 10, 32)
-		def = reflect.ValueOf(int32(ival))
+		result = reflect.ValueOf(int32(ival))
 	case reflect.Int64:
 		ival, err = strconv.ParseInt(val, 10, 64)
-		def = reflect.ValueOf(int64(ival))
+		result = reflect.ValueOf(int64(ival))
 	case reflect.Uint:
 		uival, err = strconv.ParseUint(val, 10, 64)
-		def = reflect.ValueOf(uint(uival))
+		result = reflect.ValueOf(uint(uival))
 	case reflect.Uint8:
 		uival, err = strconv.ParseUint(val, 10, 8)
-		def = reflect.ValueOf(uint8(uival))
+		result = reflect.ValueOf(uint8(uival))
 	case reflect.Uint16:
 		uival, err = strconv.ParseUint(val, 10, 16)
-		def = reflect.ValueOf(uint16(uival))
+		result = reflect.ValueOf(uint16(uival))
 	case reflect.Uint32:
 		uival, err = strconv.ParseUint(val, 10, 32)
-		def = reflect.ValueOf(uint32(uival))
+		result = reflect.ValueOf(uint32(uival))
 	case reflect.Uint64:
 		uival, err = strconv.ParseUint(val, 10, 64)
-		def = reflect.ValueOf(uival)
+		result = reflect.ValueOf(uival)
 	case reflect.Float32:
 		fval, err = strconv.ParseFloat(val, 32)
-		def = reflect.ValueOf(float32(fval))
+		result = reflect.ValueOf(float32(fval))
 	case reflect.Float64:
 		fval, err = strconv.ParseFloat(val, 64)
-		def = reflect.ValueOf(fval)
+		result = reflect.ValueOf(fval)
 	case reflect.Bool:
 		var bval bool
 		bval, err = strconv.ParseBool(val)
-		def = reflect.ValueOf(bval)
+		result = reflect.ValueOf(bval)
 	case reflect.Slice:
-		// TODO: figure out how to detect a []byte
 		switch fldval.Interface().(type) {
 		case []byte:
-			def = reflect.ValueOf([]byte(val))
+			result = reflect.ValueOf([]byte(val))
 		default:
 			panic("don't know how to parse these yet")
 		}
@@ -420,10 +427,13 @@ func getDefaultValue(fld *reflect.StructField, fldval *reflect.Value) (def refle
 	if err != nil {
 		return nilval, fmt.Errorf("could not parse default value: %v", err)
 	}
-	return def, err
+	return result, err
 }
 
 func isCorrectLabel(key string, field reflect.StructField) bool {
+	if len(key) == 0 {
+		return false
+	}
 	return key == field.Name ||
 		key == field.Tag.Get("config") ||
 		key == field.Tag.Get("yaml") ||
@@ -438,7 +448,7 @@ func isZero(val reflect.Value) bool {
 }
 
 func set(obj interface{}, key string, val interface{}) error {
-	objval := reflect.ValueOf(obj).Elem()
+	objval := reflect.ValueOf(obj).Elem() // BUG: don't use Elem for everything
 	field, err := find(objval, strings.Split(key, "."))
 	if err != nil {
 		return err

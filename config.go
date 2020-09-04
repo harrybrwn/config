@@ -3,14 +3,17 @@ package config
 import (
 	"encoding/json"
 	"errors"
+	"flag"
 	"fmt"
 	"io/ioutil"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/pflag"
 	"gopkg.in/yaml.v2"
 )
 
@@ -267,6 +270,120 @@ func SetFilename(name string) { c.SetFilename(name) }
 // SetFilename sets the config filename.
 func (c *Config) SetFilename(name string) {
 	c.file = name
+}
+
+// BindToFlagSet will bind the config struct to a standard library
+// flag set
+func BindToFlagSet(set *flag.FlagSet) { c.BindToFlagSet(set) }
+
+// BindToFlagSet will bind the config struct to a standard library
+// flag set
+func (c *Config) BindToFlagSet(set *flag.FlagSet) {
+	var (
+		typ = c.elem.Type()
+		n   = typ.NumField()
+	)
+	for i := 0; i < n; i++ {
+		fldtyp := typ.Field(i)
+		fldval := c.elem.Field(i)
+		name, _, usage, ok := getFlagInfo(fldtyp)
+		if !ok {
+			continue
+		}
+		set.Var(&flagValue{v: &fldval, fld: &fldtyp}, name, usage)
+	}
+}
+
+// BindToPFlagSet will bind the config object to a pflag set.
+// See https://pkg.go.dev/github.com/spf13/pflag?tab=doc
+func BindToPFlagSet(set *pflag.FlagSet) { c.BindToPFlagSet(set) }
+
+// BindToPFlagSet will bind the config object to a pflag set.
+// See https://pkg.go.dev/github.com/spf13/pflag?tab=doc
+func (c *Config) BindToPFlagSet(set *pflag.FlagSet) {
+	var (
+		typ = c.elem.Type()
+		n   = typ.NumField()
+	)
+	// TODO: this will not work with nested structs
+	// outer:
+	for i := 0; i < n; i++ {
+		fldtyp := typ.Field(i)
+		fldval := c.elem.Field(i)
+
+		name, shorthand, usage, ok := getFlagInfo(fldtyp)
+		if !ok {
+			// this was tagged with "notflag"
+			continue
+		}
+		flg := &pflag.Flag{
+			Name:      name,
+			Shorthand: shorthand,
+			Usage:     usage,
+			DefValue:  fldtyp.Tag.Get("default"),
+			Value:     &flagValue{v: &fldval, fld: &fldtyp},
+		}
+		if flg.DefValue == "" && fldval.CanInterface() {
+			flg.DefValue = fmt.Sprintf("%v", fldval.Interface())
+		}
+		set.AddFlag(flg)
+	}
+}
+
+func getFlagInfo(field reflect.StructField) (name, shorthand, usage string, isflag bool) {
+	var (
+		tag   = field.Tag.Get("config")
+		parts = strings.Split(tag, ",")
+		i     int
+	)
+	name = parts[0]
+	for _, p := range parts[1:] {
+		if p == "notflag" {
+			isflag = false
+			return
+		}
+
+		i = strings.Index(p, "usage=")
+		if i != -1 {
+			usage = p[i+6:]
+			continue
+		}
+		i = strings.Index(p, "shorthand=")
+		if i != -1 {
+			shorthand = p[i+10:]
+			continue
+		}
+	}
+	if name == "" {
+		name = field.Name
+	}
+	isflag = true
+	return
+}
+
+type flagValue struct {
+	v   *reflect.Value
+	fld *reflect.StructField
+}
+
+func (fv *flagValue) String() string {
+	if !fv.v.CanInterface() && fv.v.IsZero() {
+		return ""
+	}
+	return fmt.Sprintf("%v", fv.v.Interface())
+}
+
+func (fv *flagValue) Set(s string) error {
+	val, err := valueFromString(s, fv.fld, fv.v)
+	if err != nil {
+		return err
+	}
+	fv.v.Set(val)
+	return nil
+}
+
+func (fv *flagValue) Type() string {
+	return fv.fld.Type.String()
 }
 
 // NewConfigCommand creates a new cobra command for configuration
