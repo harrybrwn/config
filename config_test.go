@@ -97,7 +97,7 @@ func TestBindToFlagSet(t *testing.T) {
 	if f != nil {
 		t.Error("field with notflag tag should not be in set")
 	}
-	s.Usage()
+	// s.Usage()
 }
 
 func TestPaths(t *testing.T) {
