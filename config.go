@@ -74,6 +74,14 @@ func (c *Config) SetConfig(conf interface{}) error {
 	return nil
 }
 
+// InitDefaults will find all the default values and set each
+// struct field accordingly.
+func InitDefaults() error { return c.InitDefaults() }
+
+// InitDefaults will find all the default values and set each
+// struct field accordingly.
+func (c *Config) InitDefaults() error { return setDefaults(c.elem) }
+
 // GetConfig will return the the config struct that has been
 // set by the user but as an interface type.
 func GetConfig() interface{} { return c.GetConfig() }

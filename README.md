@@ -41,6 +41,12 @@ When initializing a configuration struct, the package will look for the struct
 tag called `default` and set the default value from the tag value. This feature
 only supports a limited number of types such as string types and integer types.
 
+By default, this feature will only work when using the global "getter"
+functions like `config.Get` or `config.GetInt` and **will not work for the
+actual struct** that is passed to `config.SetConfig`. To set the default
+values to the raw config struct, you need to call `config.InitDefaults`.
+
+
 ## Flag Binding
 
 If you want to change config values using command line options, you can bind
@@ -61,8 +67,9 @@ config.BindToFlagSet(flag.CommandLine)
 flag.Parse()
 ```
 
-Keep in mind that the order of `config.SetConfig` and `config.BindToFlagSet`
-matters.
+Keep in mind that **function call order matters** here. Calling
+`config.BindToFlagSet` before `config.SetConfig` means that there is no current
+config struct and will most likely result in a segmentation-fault.
 
 ```sh
 $ go run ./test.go -help
@@ -83,4 +90,6 @@ The `shorthand` option is only used with this package.
 ## TODO
 
 - Add an option to change the nested flag name delimiter. Right now its `-`.
-
+- Add support for multiple config file names.
+- Consider using **struct comments** as flag usage if there is no "usage" in the
+  struct tag.
