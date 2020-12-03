@@ -33,6 +33,10 @@ var (
 	nilval = reflect.ValueOf(nil)
 )
 
+const (
+	nestedFlagDelim = "-"
+)
+
 func init() { c = &Config{} }
 
 // New creates a new config object from a configuration
@@ -45,7 +49,8 @@ func New(conf interface{}) *Config {
 
 // Config holds configuration metadata
 type Config struct {
-	file      string
+	file string
+	// files     []string // TODO add support for multiple filenames
 	paths     []string
 	marshal   func(interface{}) ([]byte, error)
 	unmarshal func([]byte, interface{}) error
@@ -279,18 +284,50 @@ func BindToFlagSet(set *flag.FlagSet) { c.BindToFlagSet(set) }
 // BindToFlagSet will bind the config struct to a standard library
 // flag set
 func (c *Config) BindToFlagSet(set *flag.FlagSet) {
-	var (
-		typ = c.elem.Type()
-		n   = typ.NumField()
-	)
+	bindFlags(c.elem, "", set)
+}
+
+func bindFlags(elem reflect.Value, basename string, set *flag.FlagSet) {
+	if elem.Kind() == reflect.Ptr {
+		elem = elem.Elem()
+	}
+	typ := elem.Type()
+	if typ.Kind() == reflect.Ptr {
+		typ = typ.Elem()
+	}
+
+	n := typ.NumField()
 	for i := 0; i < n; i++ {
 		fldtyp := typ.Field(i)
-		fldval := c.elem.Field(i)
+		fldval := elem.Field(i)
 		name, _, usage, ok := getFlagInfo(fldtyp)
 		if !ok {
 			continue
 		}
-		set.Var(&flagValue{v: &fldval, fld: &fldtyp}, name, usage)
+
+		if basename != "" {
+			name = basename + nestedFlagDelim + name
+		}
+		k := fldtyp.Type.Kind()
+		if k == reflect.Struct {
+			bindFlags(fldval, name, set)
+			continue
+		} else if k == reflect.Map {
+			continue
+		}
+
+		// If BoolVar is not used, flag will require a value to be
+		// passed to the flag -boolflag=true. Using BooVar allows
+		// the usage to change to -boolflag (without the explicit value).
+		if fldtyp.Type.Kind() == reflect.Bool && fldval.CanAddr() {
+			deflt := fldtyp.Tag.Get("default")
+			set.BoolVar(
+				fldval.Addr().Interface().(*bool),
+				name, deflt == "true", usage,
+			)
+		} else {
+			set.Var(&flagValue{val: &fldval, fld: &fldtyp}, name, usage)
+		}
 	}
 }
 
@@ -301,27 +338,44 @@ func BindToPFlagSet(set *pflag.FlagSet) { c.BindToPFlagSet(set) }
 // BindToPFlagSet will bind the config object to a pflag set.
 // See https://pkg.go.dev/github.com/spf13/pflag?tab=doc
 func (c *Config) BindToPFlagSet(set *pflag.FlagSet) {
+	bindPFlags(c.elem, "", set)
+}
+
+func bindPFlags(elem reflect.Value, basename string, set *pflag.FlagSet) {
 	var (
-		typ = c.elem.Type()
+		typ = elem.Type()
 		n   = typ.NumField()
 	)
 	// TODO: this will not work with nested structs
 	// outer:
 	for i := 0; i < n; i++ {
 		fldtyp := typ.Field(i)
-		fldval := c.elem.Field(i)
+		fldval := elem.Field(i)
+		// don't know how to deal with maps
+		if k := fldval.Kind(); k == reflect.Map {
+			continue
+		}
 
 		name, shorthand, usage, ok := getFlagInfo(fldtyp)
 		if !ok {
-			// this was tagged with "notflag"
+			// this field was tagged with "notflag"
 			continue
+		}
+
+		// handle nested structs
+		if fldtyp.Type.Kind() == reflect.Struct {
+			bindPFlags(fldval, name, set)
+			continue
+		}
+		if basename != "" {
+			name = basename + nestedFlagDelim + name
 		}
 		flg := &pflag.Flag{
 			Name:      name,
 			Shorthand: shorthand,
 			Usage:     usage,
 			DefValue:  fldtyp.Tag.Get("default"),
-			Value:     &flagValue{v: &fldval, fld: &fldtyp},
+			Value:     &flagValue{val: &fldval, fld: &fldtyp},
 		}
 		if flg.DefValue == "" && fldval.CanInterface() {
 			flg.DefValue = fmt.Sprintf("%v", fldval.Interface())
@@ -336,6 +390,10 @@ func getFlagInfo(field reflect.StructField) (name, shorthand, usage string, isfl
 		parts = strings.Split(tag, ",")
 		i     int
 	)
+	if len(parts) == 0 {
+		return
+	}
+
 	name = parts[0]
 	for _, p := range parts[1:] {
 		if p == "notflag" {
@@ -350,7 +408,7 @@ func getFlagInfo(field reflect.StructField) (name, shorthand, usage string, isfl
 		}
 		i = strings.Index(p, "shorthand=")
 		if i != -1 {
-			shorthand = p[i+10:]
+			shorthand = p[i+10 : i+11]
 			continue
 		}
 	}
@@ -362,23 +420,26 @@ func getFlagInfo(field reflect.StructField) (name, shorthand, usage string, isfl
 }
 
 type flagValue struct {
-	v   *reflect.Value
+	val *reflect.Value
 	fld *reflect.StructField
 }
 
 func (fv *flagValue) String() string {
-	if !fv.v.CanInterface() && fv.v.IsZero() {
+	if fv.val == nil {
 		return ""
 	}
-	return fmt.Sprintf("%v", fv.v.Interface())
+	if !fv.val.CanInterface() && fv.val.IsZero() {
+		return ""
+	}
+	return fmt.Sprintf("%v", fv.val.Interface())
 }
 
 func (fv *flagValue) Set(s string) error {
-	val, err := valueFromString(s, fv.fld, fv.v)
+	val, err := valueFromString(s, fv.fld, fv.val)
 	if err != nil {
 		return err
 	}
-	fv.v.Set(val)
+	fv.val.Set(val)
 	return nil
 }
 

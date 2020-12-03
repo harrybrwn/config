@@ -64,6 +64,11 @@ func TestBindToFlagSet(t *testing.T) {
 		A          string `config:",usage=this is a test flag,shorthand=a"`
 		B          int    `config:"bflag,shorthand=b"`
 		OnlyInFile int    `config:"test,notflag"`
+
+		Name  string `config:"name,shorthand=n,usage=give the name"`
+		Inner struct {
+			Val int `config:"val,usage=nested flag"`
+		} `config:"inner"`
 	}
 
 	SetConfig(&C{})
@@ -92,6 +97,7 @@ func TestBindToFlagSet(t *testing.T) {
 	if f != nil {
 		t.Error("field with notflag tag should not be in set")
 	}
+	s.Usage()
 }
 
 func TestPaths(t *testing.T) {
