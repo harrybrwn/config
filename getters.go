@@ -434,8 +434,13 @@ func isCorrectLabel(key string, field reflect.StructField) bool {
 	if len(key) == 0 {
 		return false
 	}
+	var cfgkey string
+	parts := strings.Split(field.Tag.Get("config"), ",")
+	if len(parts) != 0 {
+		cfgkey = parts[0]
+	}
 	return key == field.Name ||
-		key == field.Tag.Get("config") ||
+		key == cfgkey ||
 		key == field.Tag.Get("yaml") ||
 		key == field.Tag.Get("json")
 }

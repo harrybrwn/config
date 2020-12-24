@@ -34,7 +34,7 @@ var (
 )
 
 const (
-	nestedFlagDelim = "-"
+	nestedFlagDelim = "-" // TODO make this an option
 )
 
 func init() { c = &Config{} }
@@ -354,12 +354,11 @@ func bindPFlags(elem reflect.Value, basename string, set *pflag.FlagSet) {
 		typ = elem.Type()
 		n   = typ.NumField()
 	)
-	// TODO: this will not work with nested structs
-	// outer:
 	for i := 0; i < n; i++ {
 		fldtyp := typ.Field(i)
 		fldval := elem.Field(i)
-		// don't know how to deal with maps
+
+		// TODO support maps or decide not to support maps
 		if k := fldval.Kind(); k == reflect.Map {
 			continue
 		}
@@ -372,6 +371,7 @@ func bindPFlags(elem reflect.Value, basename string, set *pflag.FlagSet) {
 
 		// handle nested structs
 		if fldtyp.Type.Kind() == reflect.Struct {
+			// TODO add a struct tag to change this name
 			bindPFlags(fldval, name, set)
 			continue
 		}
@@ -414,9 +414,11 @@ func getFlagInfo(field reflect.StructField) (name, shorthand, usage string, isfl
 			usage = p[i+6:]
 			continue
 		}
-		i = strings.Index(p, "shorthand=")
-		if i != -1 {
+		if i = strings.Index(p, "shorthand="); i != -1 {
 			shorthand = p[i+10 : i+11]
+			continue
+		} else if i = strings.Index(p, "short="); i != -1 {
+			shorthand = p[i+6 : i+7]
 			continue
 		}
 	}

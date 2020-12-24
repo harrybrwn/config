@@ -1,6 +1,7 @@
 # Just another config package
 
-This is only here because I got tired of copying it to my projects. Don't get mad **when** the api changes.
+This is here because [viper](https://github.com/spf13/viper) didn't work for me
+on windows.
 
 ## Get Started
 
@@ -8,11 +9,11 @@ Example:
 
 ```go
 type Config struct {
-    Host string  `yaml:"host" default:"localhost"`
-    Port int `default:"8080"`
+    Host string `yaml:"host" default:"localhost"`
+    Port int    `default:"8080"`
     Database struct {
         Name string `default:"postgres"`
-        Port int `default:"5432"`
+        Port int    `default:"5432"`
     } `yaml:"database"`
 
     Other string `config:"weird-name"`
@@ -30,10 +31,22 @@ func main() {
 
     fmt.Println(config.GetInt("port")) // 8080
     fmt.Println(config.GetString("database.name")) // postgres
+    fmt.Println(config.GetString("database.port")) // 5432
 
     fmt.Println(config.Get("Other") == config.Get("weird-name")) // true
 }
 ```
+
+## Struct tags
+
+For better of for worse, this library relies on struct tags for customization.
+
+| tag     | description                                    |
+| ---     | -----------                                    |
+| config  | change config name and give other info         |
+| default | give the field a default value                 |
+| env     | check this environment variable to get a value |
+
 
 ## Default Values
 
@@ -51,6 +64,14 @@ values to the raw config struct, you need to call `config.InitDefaults`.
 
 If you want to change config values using command line options, you can bind
 the current config struct to a flag set.
+
+### Struct tags for flag binding
+
+| tag       | description                                | example                                     |
+| ---       | -----------                                | -------                                     |
+| usage     | usage for the flag                         | `config:"name,usage=this is the name flag"` |
+| shorthand | give the flag a shorthand (only for pflag) | `config:"name,shorthand=n"`                 |
+| notflag   | mark the config field as not a flag        | `config:"file,notflag"`                     |
 
 ```go
 // test.go
@@ -93,3 +114,4 @@ The `shorthand` option is only used with this package.
 - Add support for multiple config file names.
 - Consider using **struct comments** as flag usage if there is no "usage" in the
   struct tag.
+
