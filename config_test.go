@@ -11,6 +11,7 @@ import (
 	"reflect"
 	"runtime"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
@@ -598,5 +599,30 @@ func TestIsEmpty(t *testing.T) {
 	}
 	if IsEmpty("map") {
 		t.Error("should not be empty")
+	}
+}
+
+func TestNestedDelim(t *testing.T) {
+	type C struct {
+		A struct {
+			B int `config:"b"`
+		} `config:"a"`
+	}
+	c := C{}
+	SetConfig(&c)
+	s := pflag.NewFlagSet("testing", pflag.ContinueOnError)
+
+	BindToPFlagSet(s)
+	u := s.FlagUsages()
+	if !strings.Contains(u, "a-b") {
+		t.Error("wrong flag usage:", u)
+	}
+
+	SetNestedFlagDelim('.')
+	s = pflag.NewFlagSet("testing", pflag.ContinueOnError)
+	BindToPFlagSet(s)
+	u = s.FlagUsages()
+	if !strings.Contains(u, "a.b") {
+		t.Error("wrong flag usage:", u)
 	}
 }

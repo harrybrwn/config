@@ -33,8 +33,8 @@ var (
 	nilval = reflect.ValueOf(nil)
 )
 
-const (
-	nestedFlagDelim = "-" // TODO make this an option
+var (
+	nestedFlagDelim rune = '-'
 )
 
 func init() { c = &Config{} }
@@ -285,6 +285,12 @@ func (c *Config) SetFilename(name string) {
 	c.file = name
 }
 
+// SetNestedFlagDelim changed the character used to seperate
+// the names of nested flags.
+func SetNestedFlagDelim(delim rune) {
+	nestedFlagDelim = delim
+}
+
 // BindToFlagSet will bind the config struct to a standard library
 // flag set
 func BindToFlagSet(set *flag.FlagSet) { c.BindToFlagSet(set) }
@@ -314,7 +320,7 @@ func bindFlags(elem reflect.Value, basename string, set *flag.FlagSet) {
 		}
 
 		if basename != "" {
-			name = basename + nestedFlagDelim + name
+			name = basename + string(nestedFlagDelim) + name
 		}
 		k := fldtyp.Type.Kind()
 		if k == reflect.Struct {
@@ -376,7 +382,7 @@ func bindPFlags(elem reflect.Value, basename string, set *pflag.FlagSet) {
 			continue
 		}
 		if basename != "" {
-			name = basename + nestedFlagDelim + name
+			name = basename + string(nestedFlagDelim) + name
 		}
 		flg := &pflag.Flag{
 			Name:      name,
