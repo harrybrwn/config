@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"reflect"
 	"strings"
+	"syscall"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -50,10 +51,13 @@ func New(conf interface{}) *Config {
 // Config holds configuration metadata
 type Config struct {
 	file string
-	// files     []string // TODO add support for multiple filenames
-	paths     []string
+
+	files []string
+	paths []string
+
 	marshal   func(interface{}) ([]byte, error)
 	unmarshal func([]byte, interface{}) error
+	tag       string
 
 	// Actual config data
 	config interface{}
@@ -192,9 +196,11 @@ func (c *Config) SetType(ext string) error {
 	case "yaml", "yml":
 		c.marshal = yaml.Marshal
 		c.unmarshal = yaml.Unmarshal
+		c.tag = "yaml"
 	case "json":
 		c.marshal = json.Marshal
 		c.unmarshal = json.Unmarshal
+		c.tag = "json"
 	default:
 		return fmt.Errorf("unknown config type %s", ext)
 	}
@@ -259,6 +265,8 @@ func (c *Config) DirUsed() string {
 	}
 	// If none of the paths exist, return
 	// the first non-empty path.
+	//
+	// TODO This is weird, should not return anything if no paths exist
 	for _, path = range c.paths {
 		if path != "" {
 			return path
@@ -278,12 +286,25 @@ func fileExists(p string) bool {
 }
 
 // SetFilename sets the config filename.
+//
+// Deprecated.
+// See AddFile
 func SetFilename(name string) { c.SetFilename(name) }
 
 // SetFilename sets the config filename.
+//
+// Deprecated.
+// See AddFile
 func (c *Config) SetFilename(name string) {
 	c.file = name
+	c.AddFile(name)
 }
+
+// AddFile adds a file name to a list of possible config files
+func AddFile(name string) { c.AddFile(name) }
+
+// AddFile adds a file name to a list of possible config files
+func (c *Config) AddFile(name string) { c.files = append(c.files, name) }
 
 // SetNestedFlagDelim changed the character used to seperate
 // the names of nested flags.
@@ -478,7 +499,12 @@ func NewConfigCommand() *cobra.Command {
 				return nil
 			}
 			if dir {
-				cmd.Println(DirUsed())
+				d := DirUsed()
+				if !exists(d) {
+					cmd.Print()
+				} else {
+					cmd.Println(d)
+				}
 				return nil
 			}
 			if edit {
@@ -493,7 +519,20 @@ func NewConfigCommand() *cobra.Command {
 					}
 					editor = envEditor
 				}
-				ex := exec.Command(editor, f)
+				stat, err := os.Stat(f)
+				if err != nil {
+					return err
+				}
+				var ex *exec.Cmd
+				fstat, ok := stat.Sys().(*syscall.Stat_t)
+				// if we are on linux and not part of the file's user
+				// or user group, then edit as root
+				if ok && (fstat.Uid != uint32(os.Getuid()) && fstat.Gid != uint32(os.Getgid())) {
+					cmd.Printf("running \"%s %s\" as root\n", editor, f)
+					ex = exec.Command("sudo", editor, f)
+				} else {
+					ex = exec.Command(editor, f)
+				}
 				ex.Stdout = cmd.OutOrStdout()
 				ex.Stderr = cmd.ErrOrStderr()
 				ex.Stdin = cmd.InOrStdin()
