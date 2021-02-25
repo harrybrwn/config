@@ -1,6 +1,7 @@
 package config
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"flag"
@@ -207,21 +208,76 @@ func (c *Config) SetType(ext string) error {
 	return nil
 }
 
-// ReadConfigFile will read in the config file
+// ReadConfig will read all the config files.
+//
+// If multiple config files are found, then the first
+// ones found will have the highest precedence and the
+// following config files will not override existing
+// values.
+func ReadConfig() error { return c.ReadConfig() }
+
+// ReadConfig will read all the config files.
+//
+// If multiple config files are found, then the first
+// ones found will have the highest precedence and the
+// following config files will not override existing
+// values.
+func (c *Config) ReadConfig() error {
+	var (
+		cp    interface{}
+		e     error
+		found int
+	)
+	for _, path := range c.paths {
+		for _, file := range c.files {
+			f := filepath.Join(path, file)
+			if !fileExists(f) {
+				continue
+			}
+			found++
+			cp = reflect.New(c.elem.Type()).Interface()
+			raw, err := ioutil.ReadFile(f)
+			if err != nil && e == nil {
+				e = err
+				continue
+			}
+			err = c.unmarshal(raw, cp)
+			if err != nil && e == nil {
+				e = err
+				continue
+			}
+			err = merge(c.elem, reflect.ValueOf(cp))
+			if err != nil && e == nil {
+				e = err
+				continue
+			}
+		}
+	}
+	if found == 0 {
+		return ErrNoConfigFile
+	}
+	return e
+}
+
+// ReadConfigFile will read in the config file.
+//
+// If multiple config files are found, then the first
+// ones found will have the highest precedence and the
+// following config files will not override existing
+// values.
+//
+// (Deprecated! see ReadConfig)
 func ReadConfigFile() error { return c.ReadConfigFile() }
 
-// ReadConfigFile will read in the config file
-func (c *Config) ReadConfigFile() error {
-	filename, err := c.findFile()
-	if err != nil {
-		return err
-	}
-	raw, err := ioutil.ReadFile(filename)
-	if err != nil {
-		return err
-	}
-	return c.unmarshal(raw, c.config)
-}
+// ReadConfigFile will read in the config file.
+//
+// If multiple config files are found, then the first
+// ones found will have the highest precedence and the
+// following config files will not override existing
+// values.
+//
+// (Deprecated! see ReadConfig)
+func (c *Config) ReadConfigFile() error { return c.ReadConfig() }
 
 // FileUsed will return the file used for
 // configuration. If no existing config directory is
@@ -287,16 +343,13 @@ func fileExists(p string) bool {
 
 // SetFilename sets the config filename.
 //
-// Deprecated.
-// See AddFile
+// (Deprecated! See AddFile)
 func SetFilename(name string) { c.SetFilename(name) }
 
 // SetFilename sets the config filename.
 //
-// Deprecated.
-// See AddFile
+// (Deprecated! See AddFile)
 func (c *Config) SetFilename(name string) {
-	c.file = name
 	c.AddFile(name)
 }
 
@@ -304,7 +357,22 @@ func (c *Config) SetFilename(name string) {
 func AddFile(name string) { c.AddFile(name) }
 
 // AddFile adds a file name to a list of possible config files
-func (c *Config) AddFile(name string) { c.files = append(c.files, name) }
+func (c *Config) AddFile(name string) {
+	c.files = append(c.files, name)
+	c.file = name
+}
+
+// TODO Add DeleteFile
+
+// DeleteFile will delete a file from
+// one of the possible config files
+//func DeleteFile(name string) { c.DeleteFile(name) }
+
+// TODO Add DeleteFile
+
+// DeleteFile will delete a file from
+// one of the possible config files
+//func (c *Config) DeleteFile(name string) {}
 
 // SetNestedFlagDelim changed the character used to seperate
 // the names of nested flags.
@@ -487,15 +555,26 @@ func (fv *flagValue) Type() string {
 // NewConfigCommand creates a new cobra command for configuration
 func NewConfigCommand() *cobra.Command {
 	var file, dir, edit bool
+	listpaths := func(prefix ...string) string {
+		buf := bytes.Buffer{}
+		for _, file := range allpaths(c.paths, c.files) {
+			if fileExists(file) {
+				buf.WriteString(strings.Join(prefix, ""))
+				buf.WriteString(file)
+				buf.WriteByte('\n')
+			}
+		}
+		// buf.WriteByte('\n')
+		return buf.String()
+	}
 	cmd := &cobra.Command{
 		Use:     "config",
 		Short:   "Manage configuration variables.",
 		Long:    `The config command helps manage program configuration variables.`,
 		Aliases: []string{"conf"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			f := FileUsed()
 			if file {
-				cmd.Println(f)
+				cmd.Print(listpaths())
 				return nil
 			}
 			if dir {
@@ -507,6 +586,8 @@ func NewConfigCommand() *cobra.Command {
 				}
 				return nil
 			}
+
+			f := FileUsed()
 			if edit {
 				if f == "" {
 					return errors.New("no config file found")
@@ -519,11 +600,12 @@ func NewConfigCommand() *cobra.Command {
 					}
 					editor = envEditor
 				}
+				var ex *exec.Cmd
+
 				stat, err := os.Stat(f)
 				if err != nil {
 					return err
 				}
-				var ex *exec.Cmd
 				fstat, ok := stat.Sys().(*syscall.Stat_t)
 				// if we are on linux and not part of the file's user
 				// or user group, then edit as root
@@ -533,6 +615,7 @@ func NewConfigCommand() *cobra.Command {
 				} else {
 					ex = exec.Command(editor, f)
 				}
+
 				ex.Stdout = cmd.OutOrStdout()
 				ex.Stderr = cmd.ErrOrStderr()
 				ex.Stdin = cmd.InOrStdin()
@@ -542,7 +625,7 @@ func NewConfigCommand() *cobra.Command {
 			if err != nil {
 				return err
 			}
-			cmd.Printf("# %s\n\n", f)
+			cmd.Println(listpaths("# "))
 			cmd.Printf("%s\n", b)
 			return nil
 		},
@@ -558,4 +641,14 @@ func NewConfigCommand() *cobra.Command {
 	cmd.Flags().BoolVarP(&file, "file", "f", false, "print the config file path")
 	cmd.Flags().BoolVarP(&dir, "dir", "d", false, "print the config directory")
 	return cmd
+}
+
+func allpaths(dirs, files []string) []string {
+	res := make([]string, 0, len(dirs)+len(files))
+	for _, d := range dirs {
+		for _, f := range files {
+			res = append(res, filepath.Join(d, f))
+		}
+	}
+	return res
 }

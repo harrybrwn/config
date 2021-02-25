@@ -2,7 +2,9 @@
 
 ## v0.1.2
 
-- Cobra command will edit with sudo if the caller does not own the config file.
+- `ReadConfigFile` is deprecated for `ReadConfig` which will now handle multiple
+  config files without overriding data from previously read config files.
+- The cobra command will edit with sudo if the caller does not own the config file.
 - Deprecated `SetFilename` in favor of AddFile. This is for the future when
   multiple config files will be supported.
 

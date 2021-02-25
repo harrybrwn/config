@@ -1,9 +1,11 @@
 package config
 
 import (
+	"bytes"
 	"fmt"
 	"io/ioutil"
 	"math"
+	"net"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -133,7 +135,7 @@ func TestReadConfig_Err(t *testing.T) {
 	if dirused := DirUsed(); dirused != "/tmp/some/path" {
 		t.Error("DirUsed should be the first non-empty path if none exist")
 	}
-	if err = ReadConfigFile(); err != ErrNoConfigFile {
+	if err = ReadConfig(); err != ErrNoConfigFile {
 		t.Error("should return the 'no config dir' error")
 	}
 
@@ -147,21 +149,112 @@ func TestReadConfig_Err(t *testing.T) {
 	}
 	SetFilename("config")
 	check(SetType("yml"))
-	err = ReadConfigFile()
+	err = ReadConfig()
 	if err != ErrNoConfigFile {
 		t.Errorf("exected the 'no config file' error; got '%v'", err)
 	}
 	fake := filepath.Join(dir, "config")
 	check(os.Mkdir(fake, 0700))
-	err = ReadConfigFile()
+	err = ReadConfig()
 	if err == nil {
 		t.Error("expected an error while reading the config")
 	}
 	check(os.Remove(fake))
 	check(ioutil.WriteFile(fake, []byte(`val: 10`), 0600))
-	check(ReadConfigFile())
+	check(ReadConfig())
 	if FileUsed() != fake {
 		t.Error("files should be the same")
+	}
+}
+
+// Test the ability to load from two different config files
+// and not to override the data every time a new one has been
+// unmarshalled.
+func TestMultiConfigMerging(t *testing.T) {
+	defer cleanup()
+	type DB struct {
+		User string
+		Host net.IP
+		Port int
+	}
+	type Email struct {
+		Address   string
+		Password  string
+		Templates []string
+	}
+	type C struct {
+		LogFile string `yaml:"log_file,omitempty"`
+		DB      DB
+		Email   Email
+	}
+
+	var (
+		err   error
+		dirs  = [2]string{filepath.Join(os.TempDir(), "one"), filepath.Join(os.TempDir(), "two")}
+		confs = [2]string{}
+	)
+	for i, d := range dirs {
+		confs[i] = filepath.Join(d, "test.yaml")
+		if err = os.MkdirAll(d, 0744); err != nil {
+			t.Fatal(err)
+		}
+		defer os.RemoveAll(d)
+	}
+	err = ioutil.WriteFile(confs[0], []byte(`
+log_file: /tmp/logs/output.log
+db:
+  user: jimmy
+  host: 10.1.1.1
+  port: 5432`), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = ioutil.WriteFile(confs[1], []byte(`
+log_file: /var/log/testing/out.log
+email:
+  address: jimmy@my.database.com
+  password: insecure
+  templates:
+    - /usr/local/share/email/template1.txt
+    - /usr/local/share/email/template2.txt`), 0644)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	cfg := &C{}
+	for _, d := range dirs {
+		AddPath(d)
+	}
+	SetConfig(cfg)
+	SetType("yaml")
+	AddFile("test.yaml")
+	err = ReadConfig()
+	if err != nil {
+		t.Error(err)
+	}
+	if cfg.LogFile != "/tmp/logs/output.log" {
+		t.Errorf("wrong logfile: got %v, want %v", cfg.LogFile, "/tmp/logs/output.log")
+	}
+	if cfg.DB.User != "jimmy" {
+		t.Error("wrong db user")
+	}
+	if bytes.Compare(cfg.DB.Host, net.ParseIP("10.1.1.1")) != 0 {
+		t.Errorf("wong db host: got %v, want %v", cfg.DB.Host, net.ParseIP("10.1.1.1"))
+	}
+	if cfg.DB.Port != 5432 {
+		t.Error("wrong db port")
+	}
+	if cfg.Email.Address != "jimmy@my.database.com" {
+		t.Errorf("bad value: got %v, want %v", cfg.Email.Address, "jimmy@my.database.com")
+	}
+	if cfg.Email.Password != "insecure" {
+		t.Error("wrong password")
+	}
+	tmpls := []string{"/usr/local/share/email/template1.txt", "/usr/local/share/email/template2.txt"}
+	for i, tmpl := range tmpls {
+		if cfg.Email.Templates[i] != tmpl {
+			t.Errorf("bad template: got %v, want %v", cfg.Email.Templates[i], tmpl)
+		}
 	}
 }
 
