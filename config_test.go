@@ -1,7 +1,6 @@
 package config
 
 import (
-	"flag"
 	"fmt"
 	"io/ioutil"
 	"math"
@@ -22,84 +21,6 @@ var pi string
 
 func init()    { pi = strconv.FormatFloat(math.Pi, 'f', 15, 64) }
 func cleanup() { c = &Config{} }
-
-func TestBindToPFlagSet(t *testing.T) {
-	defer cleanup()
-	type C struct {
-		A          string `config:",usage=this is a test flag,shorthand=a"`
-		B          int    `config:"bflag,shorthand=b"`
-		OnlyInFile int    `config:",notflag"`
-	}
-
-	SetConfig(&C{})
-	s := pflag.NewFlagSet("testing", pflag.ContinueOnError)
-	s.String("flag", "", "test flag")
-	BindToPFlagSet(s)
-
-	s.Parse([]string{"-a", "one", "--bflag=32"})
-	if a, err := s.GetString("A"); err != nil {
-		t.Error(err)
-	} else if a != "one" {
-		t.Errorf("expected %q, got %q", "one", a)
-	}
-	if b, err := s.GetInt("bflag"); err != nil {
-		t.Error(err)
-	} else if b != 32 {
-		t.Error("expected 32, got", b)
-	}
-
-	s.Parse([]string{"-b", "69"})
-	if b, err := s.GetInt("bflag"); err != nil {
-		t.Error(err)
-	} else if b != 69 {
-		t.Errorf("expected %d, got %d", 69, b)
-	}
-	if _, err := s.GetInt("OnlyInFile"); err == nil {
-		t.Error("expeced an error for a field tagged with \"notflag\"")
-	}
-}
-
-func TestBindToFlagSet(t *testing.T) {
-	defer cleanup()
-	type C struct {
-		A          string `config:",usage=this is a test flag,shorthand=a"`
-		B          int    `config:"bflag,shorthand=b"`
-		OnlyInFile int    `config:"test,notflag"`
-
-		Name  string `config:"name,shorthand=n,usage=give the name"`
-		Inner struct {
-			Val int `config:"val,usage=nested flag"`
-		} `config:"inner"`
-	}
-
-	SetConfig(&C{})
-	s := flag.NewFlagSet("testing", flag.ContinueOnError)
-	BindToFlagSet(s)
-
-	if err := s.Parse([]string{"-A", "ONE", "-bflag", "11"}); err != nil {
-		t.Error(err)
-	}
-	f := s.Lookup("A")
-	if f.Usage != "this is a test flag" {
-		t.Error("go the wrong usage")
-	}
-	if f.Value.String() != "ONE" {
-		t.Errorf("expected %q, got %q", "ONE", f.Value.String())
-	}
-	f = s.Lookup("bflag")
-	if f.Value.String() != "11" {
-		t.Error("wrong flag value")
-	}
-	f = s.Lookup("OnlyInFile")
-	if f != nil {
-		t.Error("field with notflag tag should not be in set")
-	}
-	f = s.Lookup("test")
-	if f != nil {
-		t.Error("field with notflag tag should not be in set")
-	}
-	// s.Usage()
-}
 
 func TestPaths(t *testing.T) {
 	defer cleanup()
@@ -241,6 +162,27 @@ func TestReadConfig_Err(t *testing.T) {
 	check(ReadConfigFile())
 	if FileUsed() != fake {
 		t.Error("files should be the same")
+	}
+}
+
+func TestDirUsed(t *testing.T) {
+	defer cleanup()
+	type C struct {
+		S string `config:"s"`
+	}
+	SetConfig(&C{})
+	tmp := os.TempDir()
+	AddPath(filepath.Join(tmp, "harrybrwn-config"))
+	AddPath(filepath.Join(tmp, "secondary-config"))
+
+	if DirUsed() != filepath.Join(tmp, "harrybrwn-config") {
+		t.Error("bad DirUsed result")
+	}
+	secondary := filepath.Join(tmp, "secondary-config")
+	os.Mkdir(secondary, 0777)
+	defer os.RemoveAll(secondary)
+	if d := DirUsed(); d != secondary {
+		t.Errorf("got %q, want %q", d, secondary)
 	}
 }
 

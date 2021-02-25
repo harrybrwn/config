@@ -311,8 +311,8 @@ func setDefaults(val reflect.Value) (err error) {
 	for i := 0; i < n; i++ {
 		fldVal := val.Field(i)  // field's value
 		fldType := typ.Field(i) // field's type
-		// make recursive calls
 		if fldVal.Kind() == reflect.Struct {
+			// make recursive calls
 			return setDefaults(fldVal)
 		}
 		// if the field has been set already, then
@@ -416,10 +416,12 @@ func valueFromString(
 		case []byte:
 			result = reflect.ValueOf([]byte(val))
 		default:
-			panic("don't know how to parse these yet")
+			panic(fmt.Sprintf("don't know how to parse %v yet", fld.Type.Kind()))
 		}
 	case reflect.Complex64:
+		// TODO
 	case reflect.Complex128:
+		// TODO
 	case reflect.Func:
 	default:
 		return nilval, errors.New("unknown default config type")
@@ -434,75 +436,15 @@ func isCorrectLabel(key string, field reflect.StructField) bool {
 	if len(key) == 0 {
 		return false
 	}
-	var cfgkey string
-	parts := strings.Split(field.Tag.Get("config"), ",")
-	if len(parts) != 0 {
-		cfgkey = parts[0]
-	}
-	return key == field.Name ||
-		key == cfgkey ||
-		key == field.Tag.Get("yaml") ||
-		key == field.Tag.Get("json")
-}
 
-func isZero(val reflect.Value) bool {
-	return reflect.DeepEqual(
-		val.Interface(),
-		reflect.Zero(val.Type()).Interface(),
-	)
-}
-
-func set(obj interface{}, key string, val interface{}) error {
-	objval := reflect.ValueOf(obj).Elem() // BUG: don't use Elem for everything
-	field, err := find(objval, strings.Split(key, "."))
-	if err != nil {
-		return err
+	var parts []string
+	// TODO don't look for the "json" tag if the filetype
+	// has been set as yaml and vice versa.
+	for _, tag := range []string{"config", "yaml", "json"} {
+		parts = strings.Split(field.Tag.Get(tag), ",")
+		if len(parts) > 0 && parts[0] == key {
+			return true
+		}
 	}
-	if !field.CanSet() {
-		return errors.New("cannot set value")
-	}
-
-	var exptype reflect.Kind
-	switch v := val.(type) {
-	case string:
-		exptype = reflect.String
-		field.SetString(v)
-	case []byte:
-		exptype = reflect.Slice
-		field.SetBytes(v)
-	case bool:
-		exptype = reflect.Bool
-		field.SetBool(v)
-	case complex64:
-		exptype = reflect.Complex64
-		field.SetComplex(complex128(v))
-	case complex128:
-		exptype = reflect.Complex128
-		field.SetComplex(v)
-	case int:
-		exptype = reflect.Int
-		field.SetInt(int64(v))
-	case int8:
-		exptype = reflect.Int8
-		field.SetInt(int64(v))
-	case int32:
-		exptype = reflect.Int32
-		field.SetInt(int64(v))
-	case int64:
-		exptype = reflect.Int64
-		field.SetInt(int64(v))
-	case float32:
-		exptype = reflect.Float32
-		field.SetFloat(float64(v))
-	case float64:
-		exptype = reflect.Float64
-		field.SetFloat(v)
-	default:
-		field.Set(reflect.ValueOf(val))
-		return nil
-	}
-	if field.Kind() != exptype {
-		return ErrWrongType
-	}
-	return nil
+	return field.Name == key
 }

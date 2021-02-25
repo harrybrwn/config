@@ -528,7 +528,7 @@ func NewConfigCommand() *cobra.Command {
 				// if we are on linux and not part of the file's user
 				// or user group, then edit as root
 				if ok && (fstat.Uid != uint32(os.Getuid()) && fstat.Gid != uint32(os.Getgid())) {
-					cmd.Printf("running \"%s %s\" as root\n", editor, f)
+					cmd.Printf("running \"sudo %s %s\"\n", editor, f)
 					ex = exec.Command("sudo", editor, f)
 				} else {
 					ex = exec.Command(editor, f)
@@ -538,7 +538,13 @@ func NewConfigCommand() *cobra.Command {
 				ex.Stdin = cmd.InOrStdin()
 				return ex.Run()
 			}
-			return cmd.Usage()
+			b, err := yaml.Marshal(c.config)
+			if err != nil {
+				return err
+			}
+			cmd.Printf("# %s\n\n", f)
+			cmd.Printf("%s\n", b)
+			return nil
 		},
 	}
 	cmd.AddCommand(&cobra.Command{
