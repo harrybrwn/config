@@ -661,3 +661,77 @@ func TestNestedDelim(t *testing.T) {
 		t.Error("wrong flag usage:", u)
 	}
 }
+
+func TestWatch(t *testing.T) {
+	defer cleanup()
+	type C struct {
+		A string `config:"a" json:"a" default:"hello"`
+		B int    `config:"b" json:"b" default:"10"`
+	}
+	check := func(e error) {
+		t.Helper()
+		if e != nil {
+			t.Error(e)
+		}
+	}
+	conf := &C{B: 12}
+	check(SetConfig(conf))
+	SetType("json")
+	AddPath(os.TempDir())
+	AddFile("test.json")
+	check(InitDefaults())
+	file := filepath.Join(os.TempDir(), "test.json")
+	f, err := os.Create(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	defer os.Remove(file)
+	check(Watch())
+	check(ioutil.WriteFile(file, []byte(`{"a":"there"}`), 644))
+	time.Sleep(time.Millisecond * 5)
+
+	if conf.A != "there" {
+		t.Error("Watch did not update the config struct")
+	}
+	if conf.B != 12 {
+		t.Error("expected 12")
+	}
+}
+
+func TestUpdated(t *testing.T) {
+	defer cleanup()
+	type C struct {
+		A string `config:"a" json:"a"`
+		B int    `config:"b" json:"b"`
+	}
+	conf := &C{}
+	SetConfig(conf)
+	SetType("json")
+	AddPath(os.TempDir())
+	AddFile("test.json")
+	file := filepath.Join(os.TempDir(), "test.json")
+
+	f, err := os.Create(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	defer os.Remove(file)
+
+	ch, err := Updated()
+	if err != nil {
+		t.Fatal(err)
+	}
+	go func() {
+		err := ioutil.WriteFile(file, []byte(`{"a":"hello","b":12}`), 644)
+		if err != nil {
+			t.Error(err)
+		}
+	}()
+	select {
+	case <-ch:
+	case <-time.After(time.Second):
+		t.Error("update event timeout")
+	}
+}

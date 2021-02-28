@@ -224,7 +224,6 @@ func ReadConfig() error { return c.ReadConfig() }
 // values.
 func (c *Config) ReadConfig() error {
 	var (
-		cp    interface{}
 		e     error
 		found int
 	)
@@ -234,22 +233,33 @@ func (c *Config) ReadConfig() error {
 			if !fileExists(f) {
 				continue
 			}
-			found++
-			cp = reflect.New(c.elem.Type()).Interface()
 			raw, err := ioutil.ReadFile(f)
 			if err != nil && e == nil {
 				e = err
 				continue
 			}
-			err = c.unmarshal(raw, cp)
-			if err != nil && e == nil {
-				e = err
-				continue
-			}
-			err = merge(c.elem, reflect.ValueOf(cp))
-			if err != nil && e == nil {
-				e = err
-				continue
+			found++
+
+			// If the first config file is being read,
+			// then we should just unmarshal it directly
+			if found == 1 {
+				err = c.unmarshal(raw, c.config)
+				if err != nil {
+					e = err
+					continue
+				}
+			} else {
+				cp := reflect.New(c.elem.Type()).Interface()
+				err = c.unmarshal(raw, cp)
+				if err != nil && e == nil {
+					e = err
+					continue
+				}
+				err = merge(c.elem, reflect.ValueOf(cp))
+				if err != nil && e == nil {
+					e = err
+					continue
+				}
 			}
 		}
 	}
@@ -416,7 +426,8 @@ func bindFlags(elem reflect.Value, basename string, set *flag.FlagSet) {
 			bindFlags(fldval, name, set)
 			continue
 		} else if k == reflect.Map {
-			continue
+			// TODO maybe support maps
+			panic(errors.New("maps not supported for flag binding"))
 		}
 
 		// If BoolVar is not used, flag will require a value to be
@@ -453,9 +464,9 @@ func bindPFlags(elem reflect.Value, basename string, set *pflag.FlagSet) {
 		fldtyp := typ.Field(i)
 		fldval := elem.Field(i)
 
-		// TODO support maps or decide not to support maps
+		// TODO maybe support maps
 		if k := fldval.Kind(); k == reflect.Map {
-			continue
+			panic(errors.New("maps not supported for flag binding"))
 		}
 
 		name, shorthand, usage, ok := getFlagInfo(fldtyp)
@@ -557,14 +568,13 @@ func NewConfigCommand() *cobra.Command {
 	var file, dir, edit bool
 	listpaths := func(prefix ...string) string {
 		buf := bytes.Buffer{}
-		for _, file := range allpaths(c.paths, c.files) {
+		for _, file := range allfiles(c.paths, c.files) {
 			if fileExists(file) {
 				buf.WriteString(strings.Join(prefix, ""))
 				buf.WriteString(file)
 				buf.WriteByte('\n')
 			}
 		}
-		// buf.WriteByte('\n')
 		return buf.String()
 	}
 	cmd := &cobra.Command{
@@ -579,9 +589,7 @@ func NewConfigCommand() *cobra.Command {
 			}
 			if dir {
 				d := DirUsed()
-				if !exists(d) {
-					cmd.Print()
-				} else {
+				if exists(d) {
 					cmd.Println(d)
 				}
 				return nil
@@ -643,11 +651,24 @@ func NewConfigCommand() *cobra.Command {
 	return cmd
 }
 
-func allpaths(dirs, files []string) []string {
+func allfiles(dirs, files []string) []string {
 	res := make([]string, 0, len(dirs)+len(files))
 	for _, d := range dirs {
 		for _, f := range files {
 			res = append(res, filepath.Join(d, f))
+		}
+	}
+	return res
+}
+
+func existingFiles(c Config) []string {
+	res := make([]string, 0)
+	for _, d := range c.paths {
+		for _, f := range c.files {
+			file := filepath.Join(d, f)
+			if fileExists(file) {
+				res = append(res, file)
+			}
 		}
 	}
 	return res

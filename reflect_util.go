@@ -77,34 +77,27 @@ func merge(dst, src reflect.Value) error {
 	switch dst.Kind() {
 	case reflect.Struct:
 		for i := 0; i < src.NumField(); i++ {
-			vf := src.Field(i)
-			cf := dst.Field(i)
+			sf := src.Field(i)
+			df := dst.Field(i)
 
 			// If there is no value to set, then skip it
-			if vf.IsZero() {
+			if sf.IsZero() {
 				continue
 			}
-			switch vf.Kind() {
-			case reflect.Ptr:
+			if sf.Kind() == reflect.Ptr {
 				// Copy of nil is useless
-				if vf.IsNil() {
+				if sf.IsNil() {
 					continue
 				}
-				if cf.IsNil() {
-					cf = reflect.New(vf.Elem().Type())
+				if df.IsNil() {
+					df = reflect.New(sf.Elem().Type())
 				}
-				err = merge(cf, vf)
-				if err != nil {
-					return err
-				}
-				dst.Field(i).Set(cf)
-			default:
-				err = merge(cf, vf)
-				if err != nil {
-					return err
-				}
-				dst.Field(i).Set(cf)
 			}
+			err = merge(df, sf)
+			if err != nil {
+				return err
+			}
+			dst.Field(i).Set(df)
 		}
 
 	case reflect.Map:
@@ -119,19 +112,17 @@ func merge(dst, src reflect.Value) error {
 			// copy the value from the source map
 			// and insert it into the dest
 			if !dstval.IsValid() {
-				cp := copyVal(srcval)
+				dstval = copyVal(srcval)
 				if srcval.Kind() == reflect.Ptr {
-					dst.SetMapIndex(key, cp.Addr())
-				} else {
-					dst.SetMapIndex(key, cp)
+					dstval = dstval.Addr()
 				}
 			} else {
 				err = merge(dstval, srcval)
 				if err != nil {
 					return err
 				}
-				dst.SetMapIndex(key, dstval)
 			}
+			dst.SetMapIndex(key, dstval)
 		}
 	default:
 		if dst.IsZero() {

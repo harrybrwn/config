@@ -4,7 +4,9 @@
 
 - `ReadConfigFile` is deprecated for `ReadConfig` which will now handle multiple
   config files without overriding data from previously read config files.
-- The cobra command will edit with sudo if the caller does not own the config file.
+- Added `Watch` and `Updated` for updating the config when the file changes
+- The cobra command will edit with sudo if the caller does not own the config
+  file.
 - Deprecated `SetFilename` in favor of AddFile. This is for the future when
   multiple config files will be supported.
 
@@ -22,3 +24,4 @@
   now only return a file path when it finds a file that exists. The `Paths`
   function simply returns the list of config directories stored as an
   unexported variable on the Config struct.
+
