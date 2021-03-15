@@ -8,11 +8,10 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
-	"syscall"
+	"sync"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -56,13 +55,16 @@ type Config struct {
 	files []string
 	paths []string
 
-	marshal   func(interface{}) ([]byte, error)
-	unmarshal func([]byte, interface{}) error
-	tag       string
+	marshal       func(v interface{}) ([]byte, error)
+	marshalIndent func(v interface{}, prefix, indent string) ([]byte, error)
+	unmarshal     func([]byte, interface{}) error
+	tag           string
 
 	// Actual config data
 	config interface{}
 	elem   reflect.Value
+
+	mu sync.Mutex
 }
 
 // SetConfig will set the config struct
@@ -104,7 +106,10 @@ func AddPath(path string) { c.AddPath(path) }
 // AddPath will add a path the the list of possible
 // configuration folders
 func (c *Config) AddPath(path string) {
-	c.paths = append(c.paths, os.ExpandEnv(path))
+	p := os.ExpandEnv(path)
+	if p != "" {
+		c.paths = append(c.paths, p)
+	}
 }
 
 // Paths returns the slice of folder paths that
@@ -196,10 +201,17 @@ func (c *Config) SetType(ext string) error {
 	switch ext {
 	case "yaml", "yml":
 		c.marshal = yaml.Marshal
+		c.marshalIndent = func(
+			v interface{},
+			prefix, indent string,
+		) ([]byte, error) {
+			return yaml.Marshal(v)
+		}
 		c.unmarshal = yaml.Unmarshal
 		c.tag = "yaml"
 	case "json":
 		c.marshal = json.Marshal
+		c.marshalIndent = json.MarshalIndent
 		c.unmarshal = json.Unmarshal
 		c.tag = "json"
 	default:
@@ -227,6 +239,9 @@ func (c *Config) ReadConfig() error {
 		e     error
 		found int
 	)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
 	for _, path := range c.paths {
 		for _, file := range c.files {
 			f := filepath.Join(path, file)
@@ -238,10 +253,13 @@ func (c *Config) ReadConfig() error {
 				e = err
 				continue
 			}
-			found++
 
+			found++
 			// If the first config file is being read,
 			// then we should just unmarshal it directly
+			// otherwise other config files will be read
+			// and only new parameters will be merged
+			// into the config object.
 			if found == 1 {
 				err = c.unmarshal(raw, c.config)
 				if err != nil {
@@ -267,6 +285,18 @@ func (c *Config) ReadConfig() error {
 		return ErrNoConfigFile
 	}
 	return e
+}
+
+// ReadConfigFromFile will read the config from a filepath
+func ReadConfigFromFile(file string) error { return c.ReadConfigFromFile(file) }
+
+// ReadConfigFromFile will read the config from a filepath
+func (c *Config) ReadConfigFromFile(file string) error {
+	raw, err := ioutil.ReadFile(file)
+	if err != nil {
+		return err
+	}
+	return c.unmarshal(raw, c.config)
 }
 
 // ReadConfigFile will read in the config file.
@@ -584,13 +614,13 @@ func NewConfigCommand() *cobra.Command {
 		Aliases: []string{"conf"},
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if file {
-				cmd.Print(listpaths())
+				fmt.Fprintf(cmd.OutOrStdout(), "%s\n", listpaths())
 				return nil
 			}
 			if dir {
 				d := DirUsed()
 				if exists(d) {
-					cmd.Println(d)
+					fmt.Fprintf(cmd.OutOrStdout(), "%d\n", d)
 				}
 				return nil
 			}
@@ -600,41 +630,21 @@ func NewConfigCommand() *cobra.Command {
 				if f == "" {
 					return errors.New("no config file found")
 				}
-				editor := GetString("editor")
-				if editor == "" {
-					envEditor := os.Getenv("EDITOR")
-					if envEditor == "" {
-						return errors.New("no editor set (use $EDITOR or set it in the config)")
-					}
-					editor = envEditor
-				}
-				var ex *exec.Cmd
-
-				stat, err := os.Stat(f)
+				ex, err := runEditor(f)
 				if err != nil {
 					return err
 				}
-				fstat, ok := stat.Sys().(*syscall.Stat_t)
-				// if we are on linux and not part of the file's user
-				// or user group, then edit as root
-				if ok && (fstat.Uid != uint32(os.Getuid()) && fstat.Gid != uint32(os.Getgid())) {
-					cmd.Printf("running \"sudo %s %s\"\n", editor, f)
-					ex = exec.Command("sudo", editor, f)
-				} else {
-					ex = exec.Command(editor, f)
-				}
-
 				ex.Stdout = cmd.OutOrStdout()
 				ex.Stderr = cmd.ErrOrStderr()
 				ex.Stdin = cmd.InOrStdin()
 				return ex.Run()
 			}
-			b, err := yaml.Marshal(c.config)
+			b, err := c.marshalIndent(c.config, "", "  ")
 			if err != nil {
 				return err
 			}
-			cmd.Println(listpaths("# "))
-			cmd.Printf("%s\n", b)
+			fmt.Fprintf(cmd.ErrOrStderr(), "%s\n", listpaths("# "))
+			fmt.Fprintf(cmd.OutOrStdout(), "%s\n", b)
 			return nil
 		},
 	}
@@ -642,7 +652,7 @@ func NewConfigCommand() *cobra.Command {
 		Use: "get", Short: "Get a config variable",
 		Run: func(c *cobra.Command, args []string) {
 			for _, arg := range args {
-				c.Printf("%+v\n", Get(arg))
+				fmt.Fprintf(c.OutOrStdout(), "%+v\n", Get(arg))
 			}
 		}})
 	cmd.Flags().BoolVarP(&edit, "edit", "e", false, "edit the config file")
@@ -650,6 +660,45 @@ func NewConfigCommand() *cobra.Command {
 	cmd.Flags().BoolVarP(&dir, "dir", "d", false, "print the config directory")
 	return cmd
 }
+
+func init() {
+	cobra.AddTemplateFunc("indent", func(s string) string {
+		parts := strings.Split(s, "\n")
+		for i := range parts {
+			parts[i] = "    " + parts[i]
+		}
+		return strings.Join(parts, "\n")
+	})
+}
+
+var IndentedCobraHelpTemplate = `Usage:
+{{ if (or .Runnable .HasAvailableSubCommands) }}
+	{{.UseLine}}{{end}}{{if gt (len .Aliases) 0}}
+
+Aliases:
+	{{.NameAndAliases}}{{end}}{{if .HasExample}}
+
+Examples:
+	{{.Example}}{{end}}{{if .HasAvailableSubCommands}}
+
+Available Commands:
+{{range .Commands}}{{if (or .IsAvailableCommand (eq .Name "help"))}}
+	{{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableLocalFlags}}
+
+Flags:
+
+{{.LocalFlags.FlagUsages | trimTrailingWhitespaces | indent}}{{end}}{{if .HasAvailableInheritedFlags}}
+
+Global Flags:
+
+{{.InheritedFlags.FlagUsages | trimTrailingWhitespaces | indent}}{{end}}{{if .HasHelpSubCommands}}
+
+Additional help topics:
+{{range .Commands}}{{if .IsAdditionalHelpTopicCommand}}
+	{{rpad .Name .NamePadding }} {{.Short}}{{end}}{{end}}{{end}}{{if .HasAvailableSubCommands}}
+
+Use "{{.CommandPath}} [command] --help" for more information about a command.{{end}}
+`
 
 func allfiles(dirs, files []string) []string {
 	res := make([]string, 0, len(dirs)+len(files))
@@ -672,4 +721,16 @@ func existingFiles(c Config) []string {
 		}
 	}
 	return res
+}
+
+func findEditor() (string, error) {
+	editor := GetString("editor")
+	if editor == "" {
+		envEditor := os.Getenv("EDITOR")
+		if envEditor == "" {
+			return "", errors.New("no editor set (use $EDITOR or set it in the config)")
+		}
+		editor = envEditor
+	}
+	return editor, nil
 }

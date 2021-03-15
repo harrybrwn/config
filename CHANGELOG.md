@@ -1,5 +1,14 @@
 # ChangeLog
 
+## v0.1.3
+
+- Added an explicit `ReadConfigFromFile` function for reading the config
+  directly from a file.
+- Fixed bug for windows build when editing with a terminal text editor.
+- Added a template for cobra.Command help messages that I use in basically all
+  my projects. This might be removed later as it has nothing to to with
+  configuration.
+
 ## v0.1.2
 
 - `ReadConfigFile` is deprecated for `ReadConfig` which will now handle multiple

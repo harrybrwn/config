@@ -311,14 +311,18 @@ func setDefaults(val reflect.Value) (err error) {
 	for i := 0; i < n; i++ {
 		fldVal := val.Field(i)  // field's value
 		fldType := typ.Field(i) // field's type
+
+		// make recursive calls
 		if fldVal.Kind() == reflect.Struct {
-			// make recursive calls
 			return setDefaults(fldVal)
 		}
+
 		// if the field has been set already, then
 		// it is a significant value to the user
 		// do not override with defaults
-		if !isZero(fldVal) {
+		// Also, if the field is not exported then we
+		// cannot call isZero on it.
+		if (fldType.Name[0] >= 64 && fldType.Name[0] <= 90) && !isZero(fldVal) {
 			continue
 		}
 

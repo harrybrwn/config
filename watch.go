@@ -4,11 +4,24 @@ import (
 	"errors"
 	"io/ioutil"
 	"log"
+	"os"
+	"os/signal"
 	"path/filepath"
-	"sync"
 
 	"github.com/fsnotify/fsnotify"
 )
+
+// ReloadOn takes a list of signals and will reload
+// the config whenever any of them are received.
+func (c *Config) ReloadOn(sig ...os.Signal) {
+	var sigs = make(chan os.Signal)
+	signal.Notify(sigs, sig...)
+	go func() {
+		for range sigs {
+			c.ReadConfig()
+		}
+	}()
+}
 
 // Watch will watch the config files and reload the
 // config data whenever one of the files is created,
@@ -19,10 +32,9 @@ func Watch() error { return c.Watch() }
 // config data whenever one of the files is created,
 // or changes.
 func (c *Config) Watch() error {
-	var mu sync.Mutex
 	return c.updated(func(e fsnotify.Event) {
-		mu.Lock()
-		defer mu.Unlock()
+		c.mu.Lock()
+		defer c.mu.Unlock()
 
 		raw, err := ioutil.ReadFile(e.Name)
 		if err != nil {
