@@ -25,7 +25,7 @@ func runEditor(file string) (*exec.Cmd, error) {
 	// if we are on linux and not part of the file's user
 	// or user group, then edit as root
 	if ok && (fstat.Uid != uint32(os.Getuid()) && fstat.Gid != uint32(os.Getgid())) {
-		fmt.Println("running \"sudo %s %s\"\n", editor, file)
+		fmt.Printf("running \"sudo %s %s\"\n", editor, file)
 		cmd = exec.Command("sudo", editor, file)
 	} else {
 		cmd = exec.Command(editor, file)

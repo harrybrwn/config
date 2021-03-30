@@ -620,7 +620,7 @@ func NewConfigCommand() *cobra.Command {
 			if dir {
 				d := DirUsed()
 				if exists(d) {
-					fmt.Fprintf(cmd.OutOrStdout(), "%d\n", d)
+					fmt.Fprintf(cmd.OutOrStdout(), "%s\n", d)
 				}
 				return nil
 			}
