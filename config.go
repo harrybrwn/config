@@ -10,9 +10,11 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"runtime"
 	"strings"
 	"sync"
 
+	"github.com/mitchellh/go-homedir"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"gopkg.in/yaml.v2"
@@ -140,56 +142,70 @@ func AddDefaultDirs(name string) { c.UseDefaultDirs(name) }
 // These paths are added the list (its different for windows)
 //	$XDG_CONFIG_DIR/<name>
 //	$HOME/.<name>
-func (c *Config) UseDefaultDirs(name string) {
+func (c *Config) UseDefaultDirs(dirname string) {
 	configDir, err := os.UserConfigDir()
 	if err == nil {
-		c.paths = append(c.paths, filepath.Join(configDir, name))
+		c.paths = append(c.paths, filepath.Join(configDir, dirname))
 	}
 	home, err := os.UserHomeDir()
 	if err == nil {
-		c.paths = append(c.paths, filepath.Join(home, "."+name))
+		c.paths = append(c.paths, filepath.Join(home, "."+dirname))
 	}
 }
 
-// AddConfigDir will add a config dir using the user config dir
+// AddUserConfigDir will add a config dir using the user config dir
 // (see os.UserConfigDir) and join it with the name given.
 //	$XDG_CONFIG_DIR/<name>
-func AddConfigDir(name string) error { return c.AddConfigDir(name) }
+func AddUserConfigDir(dirname string) error { return c.AddUserConfigDir(dirname) }
 
-// AddConfigDir will add a config dir using the user config dir
+// AddUserConfigDir will add a config dir using the user config dir
 // (see os.UserConfigDir) and join it with the name given.
 //	$XDG_CONFIG_DIR/<name>
-func (c *Config) AddConfigDir(name string) error {
+func (c *Config) AddUserConfigDir(dirname string) error {
 	dir, err := os.UserConfigDir()
 	if err == nil {
-		c.paths = append(c.paths, filepath.Join(dir, name))
+		c.paths = append(c.paths, filepath.Join(dir, dirname))
 	}
 	return err
 }
 
-// AddHomeDir will add a config dir using the user home dir
+// AddUserHomeDir will add a config dir using the user home dir
 // (see os.UserHomeDir) and join it with the name given and a "."
 //	$HOME/.<name>
-func AddHomeDir(name string) error { return c.AddHomeDir(name) }
+func AddUserHomeDir(name string) error { return c.AddUserHomeDir(name) }
 
-// AddHomeDir will add a config dir using the user home dir
+// AddUserHomeDir will add a config dir using the user home dir
 // (see os.UserHomeDir) and join it with the name given and a "."
 //	$HOME/.<name>
-func (c *Config) AddHomeDir(name string) error {
-	dir, err := os.UserHomeDir()
+func (c *Config) AddUserHomeDir(name string) error {
+	dir, err := homeDir()
 	if err == nil {
 		c.paths = append(c.paths, filepath.Join(dir, "."+name))
 	}
 	return err
 }
 
+func homeDir() (string, error) {
+	if runtime.GOOS != "windows" {
+		// This should be fine for linux and darwin but I'm not sure about
+		// android, netbsd, freebsd, openbsd, plan9, or solaris. If anyone
+		// cares enough to make a pull request about wether or not these OSs
+		// use sudo feel free.
+		user := os.Getenv("SUDO_USER")
+		if user != "" {
+			return filepath.Join("/home", user), nil
+		}
+	}
+	dir, err := homedir.Dir()
+	if err != nil {
+		return dir, err
+	}
+	return dir, nil
+}
+
 // HomeDir will get the user's home directory
 func HomeDir() string {
-	sudouser := os.Getenv("SUDO_USER")
-	if sudouser != "" {
-		return filepath.Join("/home", sudouser)
-	}
-	home, _ := os.UserHomeDir()
+	home, _ := homedir.Dir()
 	return home
 }
 
@@ -671,9 +687,10 @@ func init() {
 	})
 }
 
-var IndentedCobraHelpTemplate = `Usage:
-{{ if (or .Runnable .HasAvailableSubCommands) }}
-	{{.UseLine}}{{end}}{{if gt (len .Aliases) 0}}
+var IndentedCobraHelpTemplate = `Usage:{{if .Runnable}}
+
+	{{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}
+	{{.CommandPath}} [command]{{end}}{{if gt (len .Aliases) 0}}
 
 Aliases:
 	{{.NameAndAliases}}{{end}}{{if .HasExample}}
@@ -687,7 +704,7 @@ Available Commands:
 
 Flags:
 
-{{.LocalFlags.FlagUsages | trimTrailingWhitespaces | indent}}{{end}}{{if .HasAvailableInheritedFlags}}
+{{.LocalFlags.FlagUsagesWrapped 100 | trimTrailingWhitespaces | indent}}{{end}}{{if .HasAvailableInheritedFlags}}
 
 Global Flags:
 
@@ -710,7 +727,7 @@ func allfiles(dirs, files []string) []string {
 	return res
 }
 
-func existingFiles(c Config) []string {
+func existingFiles(c *Config) []string {
 	res := make([]string, 0)
 	for _, d := range c.paths {
 		for _, f := range c.files {

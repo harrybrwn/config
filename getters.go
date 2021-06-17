@@ -9,7 +9,7 @@ import (
 	"strings"
 )
 
-var errElemNotSet = errors.New("Config.elem not set, use config.New() or config.SetStruct()")
+var errElemNotSet = errors.New("field Config.elem not set, use config.New() or config.SetStruct()")
 
 // HasKey tests if the config struct has a key given
 func HasKey(key string) bool { return c.HasKey(key) }
@@ -134,10 +134,74 @@ func (c *Config) GetIntErr(key string) (int, error) {
 	return int(val.Int()), nil
 }
 
-// GetFloat will get a float64 value
-func GetFloat(key string) float64 { return c.GetFloat(key) }
+func (c *Config) GetInt64Err(key string) (int64, error) {
+	v, err := c.get(key)
+	if err != nil {
+		return 0, err
+	}
+	return v.Int(), err
+}
+func (c *Config) GetInt64(key string) int64 {
+	v, _ := c.GetInt64Err(key)
+	return v
+}
+func GetInt64Err(key string) (int64, error) { return c.GetInt64Err(key) }
+func GetInt64(key string) int64             { return c.GetInt64(key) }
 
-// GetFloat will get a float64 value
+func (c *Config) GetInt32Err(key string) (int32, error) {
+	v, err := c.GetInt64Err(key)
+	return int32(v), err
+}
+func (c *Config) GetInt32(key string) int32 {
+	v, _ := c.GetInt32Err(key)
+	return v
+}
+func GetInt32Err(key string) (int32, error) { return c.GetInt32Err(key) }
+func GetInt32(key string) int32             { return c.GetInt32(key) }
+
+func (c *Config) GetUint64Err(key string) (uint64, error) {
+	v, err := c.get(key)
+	if err != nil {
+		return 0, err
+	}
+	return v.Uint(), nil
+}
+func (c *Config) GetUint64(key string) uint64 {
+	v, _ := c.GetUint64Err(key)
+	return v
+}
+func GetUint64Err(key string) (uint64, error) { return c.GetUint64Err(key) }
+func GetUint64(key string) uint64             { return c.GetUint64(key) }
+
+func (c *Config) GetUint32Err(key string) (uint32, error) {
+	v, err := c.GetUint64Err(key)
+	return uint32(v), err
+}
+func (c *Config) GetUint32(key string) uint32 {
+	v, _ := c.GetUint32Err(key)
+	return v
+}
+func GetUint32Err(key string) (uint32, error) { return c.GetUint32Err(key) }
+func GetUint32(key string) uint32             { return c.GetUint32(key) }
+
+func (c *Config) GetUintErr(key string) (uint, error) {
+	v, err := c.GetUint64Err(key)
+	return uint(v), err
+}
+func (c *Config) GetUint(key string) uint {
+	v, _ := c.GetUintErr(key)
+	return v
+}
+func GetUintErr(key string) (uint, error) { return c.GetUintErr(key) }
+func GetUint(key string) uint             { return c.GetUint(key) }
+
+func (c *Config) GetFloatErr(key string) (float64, error) {
+	v, err := c.get(key)
+	if err != nil {
+		return 0.0, err
+	}
+	return v.Float(), nil
+}
 func (c *Config) GetFloat(key string) float64 {
 	val, err := c.get(key)
 	if err != nil {
@@ -145,18 +209,24 @@ func (c *Config) GetFloat(key string) float64 {
 	}
 	return val.Float()
 }
+func GetFloatErr(key string) (float64, error) { return c.GetFloatErr(key) }
+func GetFloat(key string) float64             { return c.GetFloat(key) }
 
-// GetFloat32 will get a float32 value
-func GetFloat32(key string) float32 { return c.GetFloat32(key) }
+func (c *Config) GetFloat64Err(key string) (float64, error) { return c.GetFloatErr(key) }
+func (c *Config) GetFloat64(key string) float64             { return c.GetFloat(key) }
+func GetFloat64Err(key string) (float64, error)             { return c.GetFloatErr(key) }
+func GetFloat64(key string) float64                         { return c.GetFloat(key) }
 
-// GetFloat32 will get a float32 value
-func (c *Config) GetFloat32(key string) float32 {
-	val, err := c.get(key)
-	if err != nil {
-		return 0.0
-	}
-	return float32(val.Float())
+func (c *Config) GetFloat32Err(key string) (float32, error) {
+	v, err := c.GetFloatErr(key)
+	return float32(v), err
 }
+func (c *Config) GetFloat32(key string) float32 {
+	v, _ := c.GetFloat32Err(key)
+	return float32(v)
+}
+func GetFloat32Err(key string) (float32, error) { return c.GetFloat32Err(key) }
+func GetFloat32(key string) float32             { return c.GetFloat32(key) }
 
 // GetBool will get the boolean value at the given key
 func GetBool(key string) bool { return c.GetBool(key) }
@@ -314,7 +384,11 @@ func setDefaults(val reflect.Value) (err error) {
 
 		// make recursive calls
 		if fldVal.Kind() == reflect.Struct {
-			return setDefaults(fldVal)
+			err := setDefaults(fldVal)
+			if seterr == nil {
+				seterr = err
+			}
+			continue
 		}
 
 		// if the field has been set already, then
@@ -328,10 +402,9 @@ func setDefaults(val reflect.Value) (err error) {
 
 		defval, err := getDefaultValue(&fldType, &fldVal)
 		switch err {
+		case nil: // break out of switch
 		case errNoDefaultValue:
 			continue
-		case nil:
-			break
 		default:
 			return err
 		}

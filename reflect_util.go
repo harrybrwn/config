@@ -171,6 +171,18 @@ func set(obj interface{}, key string, val interface{}) error {
 	case int64:
 		exptype = reflect.Int64
 		field.SetInt(int64(v))
+	case uint:
+		exptype = reflect.Uint
+		field.SetUint(uint64(v))
+	case uint16:
+		exptype = reflect.Uint16
+		field.SetUint(uint64(v))
+	case uint32:
+		exptype = reflect.Uint32
+		field.SetUint(uint64(v))
+	case uint64:
+		exptype = reflect.Uint64
+		field.SetUint(uint64(v))
 	case float32:
 		exptype = reflect.Float32
 		field.SetFloat(float64(v))

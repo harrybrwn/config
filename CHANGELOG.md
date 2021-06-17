@@ -8,6 +8,11 @@
 - Added a template for cobra.Command help messages that I use in basically all
   my projects. This might be removed later as it has nothing to to with
   configuration.
+- Fixed for windows support.
+- Changed `AddHomeDir` to `AddUserHomeDir` and `AddConfigDir` to
+  `AddUserConfigDir`.
+- Fix bug in `InitDefaults` where the function would ignore all other struct
+  fields if it found one struct.
 
 ## v0.1.2
 

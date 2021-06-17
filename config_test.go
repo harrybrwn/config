@@ -16,6 +16,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/mitchellh/go-homedir"
 	"github.com/spf13/pflag"
 )
 
@@ -33,18 +34,21 @@ func TestPaths(t *testing.T) {
 	os.Setenv("home", os.TempDir())
 
 	type C struct{}
+
 	t.Run("WithHome", func(t *testing.T) {
 		defer cleanup()
+		homedir.DisableCache = true
 		SetConfig(&C{})
 		os.Setenv("HOME", os.TempDir())
 		os.Setenv("USERPROFILE", os.TempDir())
 		os.Setenv("home", os.TempDir())
-		if err := AddHomeDir("config_test"); err != nil {
+		if err := AddUserHomeDir("config_test"); err != nil {
 			t.Error(err)
 		}
-		if c.paths[0] != filepath.Join(os.TempDir(), ".config_test") {
-			t.Error("home dir not set as a path")
+		if exp := filepath.Join(os.TempDir(), ".config_test"); c.paths[0] != exp {
+			t.Errorf("home dir not set as a path: got %q, want %q", c.paths[0], exp)
 		}
+		homedir.DisableCache = false
 	})
 
 	t.Run("WithConfig", func(t *testing.T) {
@@ -52,7 +56,7 @@ func TestPaths(t *testing.T) {
 		SetConfig(&C{})
 		os.Setenv("XDG_CONFIG_HOME", filepath.Join(os.TempDir(), ".config"))
 		os.Setenv("AppData", os.TempDir())
-		if err := AddConfigDir("config_test"); err != nil {
+		if err := AddUserConfigDir("config_test"); err != nil {
 			t.Error(err)
 		}
 		var exp string
@@ -79,6 +83,9 @@ func TestPaths(t *testing.T) {
 	SetConfig(&C{})
 	AddPath("$HOME")
 	if c.paths[0] != os.TempDir() {
+		t.Error("AddPath did set the wrong path")
+	}
+	if Paths()[0] != os.TempDir() {
 		t.Error("AddPath did set the wrong path")
 	}
 }
@@ -379,6 +386,7 @@ func TestDefaults(t *testing.T) {
 		TF bool    `config:"truefalse" default:"true"`
 		F  float64 `config:"f" env:"PI"`
 		F2 float32 `config:"f2" default:"1.3"`
+		U  uint    `config:"8"`
 	}
 	conf := &C{}
 	SetConfig(conf)
@@ -418,6 +426,36 @@ func TestDefaults(t *testing.T) {
 	conf.F2 = 5.9
 	if GetFloat32("f2") == 1.3 {
 		t.Error("default float32 value should have been overridden")
+	}
+}
+
+func TestDefaults_Err(t *testing.T) {
+	defer cleanup()
+	type C struct {
+		A  string  `config:"a" env:"TEST_A"`
+		B  int     `config:"b" default:"x"`
+		TF bool    `config:"truefalse" default:"8"`
+		F  float64 `config:"f" env:"PI"`
+		F2 float32 `config:"f2" default:"what am i even doing"`
+	}
+	conf := &C{}
+	SetConfig(conf)
+	os.Setenv("PI", "not a number")
+
+	if _, err := GetIntErr("b"); err == nil {
+		t.Error("expected an error")
+	}
+	if GetInt("b") != 0 {
+		t.Error("should not be anything but 0")
+	}
+	if GetFloat("f") != 0.0 {
+		t.Error("default should not be a valid number")
+	}
+	if GetFloat("f2") != 0 {
+		t.Error("default should not be a valid number")
+	}
+	if _, err := GetBoolErr("truefalse"); err == nil {
+		t.Error("expected an error")
 	}
 }
 
@@ -483,34 +521,8 @@ func TestSetDefaults(t *testing.T) {
 	}
 }
 
-func TestDefaults_Err(t *testing.T) {
-	defer cleanup()
-	type C struct {
-		A  string  `config:"a" env:"TEST_A"`
-		B  int     `config:"b" default:"x"`
-		TF bool    `config:"truefalse" default:"8"`
-		F  float64 `config:"f" env:"PI"`
-		F2 float32 `config:"f2" default:"what am i even doing"`
-	}
-	conf := &C{}
-	SetConfig(conf)
-	os.Setenv("PI", "not a number")
+func TestSetDefaults_Err(t *testing.T) {
 
-	if _, err := GetIntErr("b"); err == nil {
-		t.Error("expected an error")
-	}
-	if GetInt("b") != 0 {
-		t.Error("should not be anything but 0")
-	}
-	if GetFloat("f") != 0.0 {
-		t.Error("default should not be a valid number")
-	}
-	if GetFloat("f2") != 0 {
-		t.Error("default should not be a valid number")
-	}
-	if _, err := GetBoolErr("truefalse"); err == nil {
-		t.Error("expected an error")
-	}
 }
 
 func TestGetMap(t *testing.T) {
@@ -733,5 +745,31 @@ func TestUpdated(t *testing.T) {
 	case <-ch:
 	case <-time.After(time.Second):
 		t.Error("update event timeout")
+	}
+}
+
+func TestEditor(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("echo is not on windows")
+	}
+	defer cleanup()
+	conf := struct{}{}
+	SetConfig(&conf)
+	os.Setenv("EDITOR", "echo")
+	f, err := os.CreateTemp("", "config_editor_test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	defer os.Remove(f.Name())
+	cmd, err := runEditor(f.Name())
+	if err != nil {
+		t.Fatal(err)
+	}
+	var b bytes.Buffer
+	cmd.Stderr, cmd.Stdout = &b, &b // make it silent
+	err = cmd.Run()
+	if err != nil {
+		t.Error(err)
 	}
 }
