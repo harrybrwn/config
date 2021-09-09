@@ -52,9 +52,11 @@ func New(conf interface{}) *Config {
 
 // Config holds configuration metadata
 type Config struct {
-	file string
-
-	files []string
+	// List of full filepaths for possible config files.
+	filepaths []string
+	// List of names that a config file could be (not a directory)
+	filenames []string
+	// List of directories in which a config file might be.
 	paths []string
 
 	marshal       func(v interface{}) ([]byte, error)
@@ -102,16 +104,95 @@ func (c *Config) GetConfig() interface{} {
 }
 
 // AddPath will add a path the the list of possible
-// configuration folders
+// configuration folders where a file could be found.
+// See AddFile to add a file to the list of possible
+// files to be read within a configuration search path.
 func AddPath(path string) { c.AddPath(path) }
 
 // AddPath will add a path the the list of possible
-// configuration folders
+// configuration folders where a file could be found.
+// See AddFile to add a file to the list of possible
+// files to be read within a configuration search path.
 func (c *Config) AddPath(path string) {
 	p := os.ExpandEnv(path)
 	if p != "" {
 		c.paths = append(c.paths, p)
 	}
+}
+
+// AddFile will add a filename to the list of possible config
+// filenames. This should be the name of a file without any information
+// about the directory or location.
+//
+// A path and filename could be used and will be treated as relative to
+// any of the paths added with AddPath but is behavior which is not
+// guaranteed to be supported in the future.
+//
+// To add a directory to the search path, use AddPath.
+func AddFile(name string) { c.AddFile(name) }
+
+// AddFile will add a filename to the list of possible config
+// filenames. This should be the name of a file without any information
+// about the directory or location.
+//
+// A path and filename could be used and will be treated as relative to
+// any of the paths added with AddPath but is behavior which is not
+// guaranteed to be supported in the future.
+//
+// To add a directory to the search path, use AddPath.
+func (c *Config) AddFile(name string) {
+	c.filenames = append(c.filenames, name)
+}
+
+// AddFilepath will add a full filepath to the list of possible
+// config files. This is not the same as adding the path and filename
+// separately. This does not add a search path or filename to search
+// for and should be regarded as hard coding a configuration filepath.
+func AddFilepath(filepath string) { c.AddFilepath(filepath) }
+
+// AddFilepath will add a full filepath to the list of possible
+// config files. This is not the same as adding the path and filename
+// separately. This does not add a search path or filename to search
+// for and should be regarded as hard coding a configuration filepath.
+func (c *Config) AddFilepath(filepath string) {
+	c.filepaths = append(c.filepaths, filepath)
+}
+
+// RemoveFile will remove a filename from the
+// list of config files names. Essentially the
+// inverse operation of AddFilename.
+func RemoveFile(name string) { c.RemoveFile(name) }
+
+// RemoveFile will remove a filename from the
+// list of config files names. Essentially the
+// inverse operation of AddFilename.
+func (c *Config) RemoveFile(name string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.filenames = remove(c.filenames, name)
+}
+
+// RemovePath will remove a path from the list of possible
+// config file locations.
+func RemovePath(path string) { c.RemovePath(path) }
+
+// RemovePath will remove a path from the list of possible
+// config file locations.
+func (c *Config) RemovePath(path string) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.paths = remove(c.paths, path)
+}
+
+func remove(s []string, value string) []string {
+	removed := make([]string, 0, len(s))
+	for _, v := range s {
+		if v == value {
+			continue
+		}
+		removed = append(removed, v)
+	}
+	return removed
 }
 
 // Paths returns the slice of folder paths that
@@ -155,12 +236,12 @@ func (c *Config) UseDefaultDirs(dirname string) {
 
 // AddUserConfigDir will add a config dir using the user config dir
 // (see os.UserConfigDir) and join it with the name given.
-//	$XDG_CONFIG_DIR/<name>
+//	$XDG_CONFIG_DIR/<dirname>
 func AddUserConfigDir(dirname string) error { return c.AddUserConfigDir(dirname) }
 
 // AddUserConfigDir will add a config dir using the user config dir
 // (see os.UserConfigDir) and join it with the name given.
-//	$XDG_CONFIG_DIR/<name>
+//	$XDG_CONFIG_DIR/<dirname>
 func (c *Config) AddUserConfigDir(dirname string) error {
 	dir, err := os.UserConfigDir()
 	if err == nil {
@@ -213,8 +294,8 @@ func HomeDir() string {
 func SetType(ext string) error { return c.SetType(ext) }
 
 // SetType will set the file type of config being used.
-func (c *Config) SetType(ext string) error {
-	switch ext {
+func (c *Config) SetType(t string) error {
+	switch t {
 	case "yaml", "yml":
 		c.marshal = yaml.Marshal
 		c.marshalIndent = func(
@@ -231,7 +312,7 @@ func (c *Config) SetType(ext string) error {
 		c.unmarshal = json.Unmarshal
 		c.tag = "json"
 	default:
-		return fmt.Errorf("unknown config type %s", ext)
+		return fmt.Errorf("unknown config type %s", t)
 	}
 	return nil
 }
@@ -240,7 +321,7 @@ func (c *Config) SetType(ext string) error {
 //
 // If multiple config files are found, then the first
 // ones found will have the highest precedence and the
-// following config files will not override existing
+// following config files will not overwrite existing
 // values.
 func ReadConfig() error { return c.ReadConfig() }
 
@@ -248,101 +329,155 @@ func ReadConfig() error { return c.ReadConfig() }
 //
 // If multiple config files are found, then the first
 // ones found will have the highest precedence and the
-// following config files will not override existing
+// following config files will not overwrite existing
 // values.
 func (c *Config) ReadConfig() error {
-	var (
-		e     error
-		found int
-	)
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	for _, path := range c.paths {
-		for _, file := range c.files {
-			f := filepath.Join(path, file)
-			if !fileExists(f) {
-				continue
-			}
-			raw, err := ioutil.ReadFile(f)
-			if err != nil && e == nil {
-				e = err
-				continue
-			}
-
-			found++
-			// If the first config file is being read,
-			// then we should just unmarshal it directly
-			// otherwise other config files will be read
-			// and only new parameters will be merged
-			// into the config object.
-			if found == 1 {
-				err = c.unmarshal(raw, c.config)
-				if err != nil {
-					e = err
-					continue
-				}
-			} else {
-				cp := reflect.New(c.elem.Type()).Interface()
-				err = c.unmarshal(raw, cp)
-				if err != nil && e == nil {
-					e = err
-					continue
-				}
-				err = merge(c.elem, reflect.ValueOf(cp))
-				if err != nil && e == nil {
-					e = err
-					continue
-				}
-			}
-		}
-	}
-	if found == 0 {
-		return ErrNoConfigFile
-	}
-	return e
+	return c.readConfigFiles(0)
 }
 
-// ReadConfigFromFile will read the config from a filepath
-func ReadConfigFromFile(file string) error { return c.ReadConfigFromFile(file) }
+// ReadConfigNoOverwrite will read all config files but will not overwrite
+// fields on the config struct if they are not a zero value.
+func ReadConfigNoOverwrite() error { return c.ReadConfigNoOverwrite() }
 
-// ReadConfigFromFile will read the config from a filepath
-func (c *Config) ReadConfigFromFile(file string) error {
-	raw, err := ioutil.ReadFile(file)
+// ReadConfigNoOverwrite will read all config files but will not overwrite
+// fields on the config struct if they are not a zero value.
+func (c *Config) ReadConfigNoOverwrite() error {
+	// use 1 so that the readConfigFiles will always merge
+	// a copy insdead of unmarshaling the config in-place.
+	return c.readConfigFiles(1)
+}
+
+// Deprecated: Use AddFilepath
+func ReadConfigFromFile(filepath string) error { return c.ReadConfigFromFile(filepath) }
+
+// Deprecated: Use AddFilepath
+func (c *Config) ReadConfigFromFile(filepath string) error {
+	raw, err := ioutil.ReadFile(filepath)
 	if err != nil {
 		return err
 	}
 	return c.unmarshal(raw, c.config)
 }
 
-// ReadConfigFile will read in the config file.
-//
-// If multiple config files are found, then the first
-// ones found will have the highest precedence and the
-// following config files will not override existing
-// values.
-//
-// (Deprecated! see ReadConfig)
+// Deprecated: use ReadConfig
 func ReadConfigFile() error { return c.ReadConfigFile() }
 
-// ReadConfigFile will read in the config file.
+// Deprecated: use ReadConfig
+func (c *Config) ReadConfigFile() error { return c.readConfigFiles(0) }
+
+// readConfigFiles will search through all possible config file locations
+// to read and marshal the contents into the user config object. The parameter
+// `found` is the number of config files that have been previously found and
+// read.
 //
-// If multiple config files are found, then the first
-// ones found will have the highest precedence and the
-// following config files will not override existing
-// values.
-//
-// (Deprecated! see ReadConfig)
-func (c *Config) ReadConfigFile() error { return c.ReadConfig() }
+// If this number is zero, the first existing config file found will
+// be marsheled directly into the user config object, all subsequent files
+// will read will not overwrite existing values written by previous config files.
+// To prevent overwrites by default, pass a number greater than zero.
+func (c *Config) readConfigFiles(found int) error {
+	var (
+		e     error
+		start = found // save this until the end
+	)
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	filepaths := existingFiles(c)
+
+	for _, filepath := range filepaths {
+		raw, err := ioutil.ReadFile(filepath)
+		if err != nil && e == nil {
+			e = err
+			continue
+		}
+
+		found++
+		// If the first config file is being read,
+		// then we should just unmarshal it directly.
+		// Otherwise, secondary config files will be read
+		// and only new parameters will be merged
+		// into the config object. This prevents overwriting
+		// existing values.
+		if found == 1 {
+			err = c.unmarshal(raw, c.config)
+			if err != nil {
+				e = err
+				continue
+			}
+		} else {
+			cp := reflect.New(c.elem.Type()).Interface()
+			err = c.unmarshal(raw, cp)
+			if err != nil && e == nil {
+				e = err
+				continue
+			}
+			err = merge(c.elem, reflect.ValueOf(cp))
+			if err != nil && e == nil {
+				e = err
+				continue
+			}
+		}
+	}
+
+	if found == start {
+		return ErrNoConfigFile
+	}
+	return e
+}
+
+func existingFiles(c *Config) []string {
+	l := len(c.filepaths) + len(c.paths) + len(c.filenames)
+	res := make([]string, 0, l)
+	for _, filepath := range c.filepaths {
+		if fileExists(filepath) {
+			res = append(res, filepath)
+		}
+	}
+	for _, d := range c.paths {
+		for _, f := range c.filenames {
+			file := filepath.Join(d, f)
+			if fileExists(file) {
+				res = append(res, file)
+			}
+		}
+	}
+	return res
+}
+
+func (c *Config) allPossibleFiles() []string {
+	res := make([]string, 0, len(c.filepaths)+len(c.filenames)+len(c.paths))
+	res = append(res, c.filepaths...)
+	for _, p := range c.paths {
+		for _, f := range c.filenames {
+			res = append(res, filepath.Join(p, f))
+		}
+	}
+	return res
+}
+
+// FilesUsed will return a list of all the configuration files
+// that exist within the specified search space. This are the
+// same files used when calling ReadConfig.
+func FilesUsed() []string { return c.FilesUsed() }
+
+// FilesUsed will return a list of all the configuration files
+// that exist within the specified search space. This are the
+// same files used when calling ReadConfig.
+func (c *Config) FilesUsed() []string {
+	return existingFiles(c)
+}
 
 // FileUsed will return the file used for
 // configuration. If no existing config directory is
 // found then this will return an empty string.
+
+// Deprecated: use FilesUsed
 func FileUsed() string { return c.FileUsed() }
 
 // FileUsed will return the file used for
 // configuration. If no existing config file is
 // found then this will return an empty string.
+
+// Deprecated: use FilesUsed
 func (c *Config) FileUsed() string {
 	f, _ := c.findFile()
 	return f
@@ -351,22 +486,46 @@ func (c *Config) FileUsed() string {
 func (c *Config) findFile() (string, error) {
 	var file string
 	for _, path := range c.paths {
-		file = filepath.Join(path, c.file)
-		if fileExists(file) {
-			return file, nil
+		for _, f := range c.filenames {
+			file = filepath.Join(path, f)
+			if fileExists(file) {
+				return file, nil
+			}
 		}
 	}
 	return "", ErrNoConfigFile
 }
 
+// PathsUsed will return all configuration paths
+// where there is an existing configuration file.
+func PathsUsed() []string {
+	return c.PathsUsed()
+}
+
+// PathsUsed will return all configuration paths
+// where there is an existing configuration file.
+func (c *Config) PathsUsed() []string {
+	files := existingFiles(c)
+	paths := make([]string, 0, len(files))
+	for _, f := range files {
+		dir, _ := filepath.Split(f)
+		paths = append(paths, dir)
+	}
+	return paths
+}
+
 // DirUsed returns the path of the first existing
 // config directory.
+
+// Deprecated: use PathsUsed
 func DirUsed() string { return c.DirUsed() }
 
 // DirUsed returns the path of the first existing
 // config directory.
 // If none of the paths exist, then
 // The first non-empty path will be returned.
+
+// Deprecated: use PathsUsed
 func (c *Config) DirUsed() string {
 	var path string
 	for _, path = range c.paths {
@@ -397,38 +556,13 @@ func fileExists(p string) bool {
 	return !os.IsNotExist(err) && !stat.IsDir()
 }
 
-// SetFilename sets the config filename.
-//
-// (Deprecated! See AddFile)
+// Deprecated: Use AddFile
 func SetFilename(name string) { c.SetFilename(name) }
 
-// SetFilename sets the config filename.
-//
-// (Deprecated! See AddFile)
+// Deprecated: Use AddFile
 func (c *Config) SetFilename(name string) {
 	c.AddFile(name)
 }
-
-// AddFile adds a file name to a list of possible config files
-func AddFile(name string) { c.AddFile(name) }
-
-// AddFile adds a file name to a list of possible config files
-func (c *Config) AddFile(name string) {
-	c.files = append(c.files, name)
-	c.file = name
-}
-
-// TODO Add DeleteFile
-
-// DeleteFile will delete a file from
-// one of the possible config files
-//func DeleteFile(name string) { c.DeleteFile(name) }
-
-// TODO Add DeleteFile
-
-// DeleteFile will delete a file from
-// one of the possible config files
-//func (c *Config) DeleteFile(name string) {}
 
 // SetNestedFlagDelim changed the character used to seperate
 // the names of nested flags.
@@ -610,11 +744,15 @@ func (fv *flagValue) Type() string {
 }
 
 // NewConfigCommand creates a new cobra command for configuration
-func NewConfigCommand() *cobra.Command {
-	var file, dir, edit bool
+func NewConfigCommand() *cobra.Command { return c.NewConfigCommand() }
+
+func (c *Config) NewConfigCommand() *cobra.Command {
+	var (
+		file, dir, edit, list bool
+	)
 	listpaths := func(prefix ...string) string {
 		buf := bytes.Buffer{}
-		for _, file := range allfiles(c.paths, c.files) {
+		for _, file := range c.allPossibleFiles() {
 			if fileExists(file) {
 				buf.WriteString(strings.Join(prefix, ""))
 				buf.WriteString(file)
@@ -634,9 +772,8 @@ func NewConfigCommand() *cobra.Command {
 				return nil
 			}
 			if dir {
-				d := DirUsed()
-				if exists(d) {
-					fmt.Fprintf(cmd.OutOrStdout(), "%s\n", d)
+				for _, p := range c.PathsUsed() {
+					cmd.Println(p)
 				}
 				return nil
 			}
@@ -655,6 +792,14 @@ func NewConfigCommand() *cobra.Command {
 				ex.Stdin = cmd.InOrStdin()
 				return ex.Run()
 			}
+
+			if list {
+				for _, f := range c.allPossibleFiles() {
+					cmd.Println(f)
+				}
+				return nil
+			}
+
 			b, err := c.marshalIndent(c.config, "", "  ")
 			if err != nil {
 				return err
@@ -672,8 +817,9 @@ func NewConfigCommand() *cobra.Command {
 			}
 		}})
 	cmd.Flags().BoolVarP(&edit, "edit", "e", false, "edit the config file")
-	cmd.Flags().BoolVarP(&file, "file", "f", false, "print the config file path")
-	cmd.Flags().BoolVarP(&dir, "dir", "d", false, "print the config directory")
+	cmd.Flags().BoolVarP(&file, "file", "f", false, "print the config files being used")
+	cmd.Flags().BoolVarP(&dir, "dir", "d", false, "print the config directories being used")
+	cmd.Flags().BoolVarP(&list, "list-all", "l", list, "list all possible config files whether they exist or not")
 	return cmd
 }
 
@@ -687,6 +833,9 @@ func init() {
 	})
 }
 
+// This is a template for cobra commands that more
+// closely imitates the style of the go command help
+// message.
 var IndentedCobraHelpTemplate = `Usage:{{if .Runnable}}
 
 	{{.UseLine}}{{end}}{{if .HasAvailableSubCommands}}
@@ -722,19 +871,6 @@ func allfiles(dirs, files []string) []string {
 	for _, d := range dirs {
 		for _, f := range files {
 			res = append(res, filepath.Join(d, f))
-		}
-	}
-	return res
-}
-
-func existingFiles(c *Config) []string {
-	res := make([]string, 0)
-	for _, d := range c.paths {
-		for _, f := range c.files {
-			file := filepath.Join(d, f)
-			if fileExists(file) {
-				res = append(res, file)
-			}
 		}
 	}
 	return res

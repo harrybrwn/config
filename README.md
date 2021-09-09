@@ -20,20 +20,26 @@ type Config struct {
 }
 
 func main() {
-    config.SetConfig(&Config{})
+    c := &Config{}
+    config.SetConfig(c)
     config.SetType("yaml")
-    config.AddPath(".") // look for the config file in "."
-    config.SetFilename("config.yml") // look for a file named "config.yaml"
+    config.AddFile("config.yml") // look for a file named "config.yaml"
+    config.AddPath(".")          // look for the config file in "."
     err := config.ReadConfigFile()
     if err == config.NoConfigFile {
         // handle
     }
 
+    // Defaults are set
     fmt.Println(config.GetInt("port")) // 8080
     fmt.Println(config.GetString("database.name")) // postgres
     fmt.Println(config.GetString("database.port")) // 5432
 
+    // Alternate naming
     fmt.Println(config.Get("Other") == config.Get("weird-name")) // true
+
+    // Values are also set on the struct
+    fmt.Println(config.GetInt("port") == c.Port) // true
 }
 ```
 
@@ -90,7 +96,7 @@ flag.Parse()
 
 Keep in mind that **function call order matters** here. Calling
 `config.BindToFlagSet` before `config.SetConfig` means that there is no current
-config struct and will most likely result in a segmentation-fault.
+config struct and will most likely result in a nil pointer panic.
 
 ```sh
 $ go run ./test.go -help
@@ -110,8 +116,7 @@ The `shorthand` option is only used with this package.
 
 ## TODO
 
-- Add an option to change the nested flag name delimiter. Right now its `-`.
-- Add support for multiple config file names.
-- Consider using **struct comments** as flag usage if there is no "usage" in the
-  struct tag.
-
+- Consider using struct field comments as flag usage if there is no "usage" in the
+  struct tag. My current usage of struct tags is bordering on abuse of the feature
+  so struct field comments might be an interesting alternative. I currently hate
+  both options.

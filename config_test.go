@@ -25,6 +25,9 @@ var pi string
 func init()    { pi = strconv.FormatFloat(math.Pi, 'f', 15, 64) }
 func cleanup() { c = &Config{} }
 
+func Test(t *testing.T) {
+}
+
 func TestPaths(t *testing.T) {
 	defer cleanup()
 	os.Setenv("XDG_CONFIG_HOME", filepath.Join(os.TempDir(), ".config"))
@@ -45,10 +48,26 @@ func TestPaths(t *testing.T) {
 		if err := AddUserHomeDir("config_test"); err != nil {
 			t.Error(err)
 		}
-		if exp := filepath.Join(os.TempDir(), ".config_test"); c.paths[0] != exp {
-			t.Errorf("home dir not set as a path: got %q, want %q", c.paths[0], exp)
+		exptmp := filepath.Join(os.TempDir(), ".config_test")
+		if c.paths[0] != exptmp {
+			t.Errorf("home dir not set as a path: got %q, want %q", c.paths[0], exptmp)
 		}
 		homedir.DisableCache = false
+		AddFile("test.txt")
+		if c.filenames[0] != "test.txt" {
+			t.Errorf("expected %q to be in filenames", "test.txt")
+		}
+		if c.allPossibleFiles()[0] != filepath.Join(exptmp, "test.txt") {
+			t.Error("allPossibleFiles did not return the correct result")
+		}
+		RemovePath(exptmp)
+		RemoveFile("test.txt")
+		if len(c.paths) != 0 {
+			t.Errorf("should have have any paths: got %v", c.paths)
+		}
+		if len(c.filenames) != 0 {
+			t.Errorf("should have have any filenames: got %v", c.filenames)
+		}
 	})
 
 	t.Run("WithConfig", func(t *testing.T) {

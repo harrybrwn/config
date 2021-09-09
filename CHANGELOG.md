@@ -1,5 +1,20 @@
 # ChangeLog
 
+## v0.1.4
+
+- Added `AddFilepath` so users can add a hard-coded filepath to the list
+  of possible config files but without adding a search path or filename.
+- The function `ReadConfigNoOverwrite` was added as a way to populate the
+  configuration without overwriting existing values.
+- Added `RemoveFile` to remove a filename and `RemovePath` to remove a config
+  search path.
+- Documentation now more clearly states how `AddFile` and `AddPath` are meant to
+  be used.
+- Fixed `NewConfigCommand` to follow the pattern of methods on the `Config`
+  struct with corresponding global functions for a global config.
+- `DirUsed` deprecated in favor of `PathsUsed`
+- `FileUsed` deprecated in favor of `FilesUsed`
+
 ## v0.1.3
 
 - Added an explicit `ReadConfigFromFile` function for reading the config
@@ -38,4 +53,3 @@
   now only return a file path when it finds a file that exists. The `Paths`
   function simply returns the list of config directories stored as an
   unexported variable on the Config struct.
-

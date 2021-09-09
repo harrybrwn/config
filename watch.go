@@ -110,7 +110,7 @@ func (c *Config) updated(f func(fsnotify.Event)) error {
 
 	n := 0
 	for _, path := range c.paths {
-		for _, file := range c.files {
+		for _, file := range c.filenames {
 			f := filepath.Join(path, file)
 			err = watcher.Add(f)
 			if err != nil {
