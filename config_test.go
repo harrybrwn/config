@@ -385,7 +385,6 @@ func TestGet_Err(t *testing.T) {
 	if GetFloat32(key) != 0.0 {
 		t.Error("nonexistant key should give a zero value")
 	}
-
 	if GetInt("NotASlice") != 5 {
 		t.Error("dummy check failed for GetInt")
 	}
@@ -719,7 +718,7 @@ func TestWatch(t *testing.T) {
 	f.Close()
 	defer os.Remove(file)
 	check(Watch())
-	check(ioutil.WriteFile(file, []byte(`{"a":"there"}`), 644))
+	check(ioutil.WriteFile(file, []byte(`{"a":"there"}`), 0644))
 	time.Sleep(time.Millisecond * 5)
 
 	if conf.A != "there" {
@@ -755,7 +754,7 @@ func TestUpdated(t *testing.T) {
 		t.Fatal(err)
 	}
 	go func() {
-		err := ioutil.WriteFile(file, []byte(`{"a":"hello","b":12}`), 644)
+		err := ioutil.WriteFile(file, []byte(`{"a":"hello","b":12}`), 0644)
 		if err != nil {
 			t.Error(err)
 		}

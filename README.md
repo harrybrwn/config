@@ -90,7 +90,11 @@ type Config struct {
     } `config:"inner"`
 }
 config.SetConfig(&Config{})
-config.BindToFlagSet(flag.CommandLine)
+config.BindToFlagSet(
+    flag.CommandLine,
+    config.NewFlagInfo("name", "n", "give the name"),
+    config.NewFlagInfo("inner-val", "", "nested flag"),
+)
 flag.Parse()
 ```
 
@@ -114,9 +118,3 @@ This feature also supports the common flag package drop in replacement called
 `github.com/spf13/pflag` and can be accessed using `BindToPFlagSet(set *pflag.FlagSet)`.
 The `shorthand` option is only used with this package.
 
-## TODO
-
-- Consider using struct field comments as flag usage if there is no "usage" in the
-  struct tag. My current usage of struct tags is bordering on abuse of the feature
-  so struct field comments might be an interesting alternative. I currently hate
-  both options.

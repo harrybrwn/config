@@ -14,6 +14,9 @@
   struct with corresponding global functions for a global config.
 - `DirUsed` deprecated in favor of `PathsUsed`
 - `FileUsed` deprecated in favor of `FilesUsed`
+- Can now set flag usage and shorthand when binding to a flagset using the new
+  `FlagInfo` interface which can be passed to `BinfToFlagSet` and
+  `BindToPFlagSet`.
 
 ## v0.1.3
 

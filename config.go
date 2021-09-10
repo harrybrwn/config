@@ -570,17 +570,59 @@ func SetNestedFlagDelim(delim rune) {
 	nestedFlagDelim = delim
 }
 
-// BindToFlagSet will bind the config struct to a standard library
-// flag set
-func BindToFlagSet(set *flag.FlagSet) { c.BindToFlagSet(set) }
-
-// BindToFlagSet will bind the config struct to a standard library
-// flag set
-func (c *Config) BindToFlagSet(set *flag.FlagSet) {
-	bindFlags(c.elem, "", set)
+type Flag struct {
+	name, usage, shorthand string
 }
 
-func bindFlags(elem reflect.Value, basename string, set *flag.FlagSet) {
+func (f *Flag) Name() string      { return f.name }
+func (f *Flag) Usage() string     { return f.usage }
+func (f *Flag) Shorthand() string { return f.shorthand }
+func (f *Flag) IsFlag() bool      { return true }
+
+type disabledFlag struct{ name string }
+
+func (f *disabledFlag) IsFlag() bool      { return false }
+func (f *disabledFlag) Name() string      { return f.name }
+func (f *disabledFlag) Usage() string     { return "" }
+func (f *disabledFlag) Shorthand() string { return "" }
+
+func DisableFlag(name string) FlagInfo {
+	return &disabledFlag{name}
+}
+
+func NewFlagInfo(name, shorthand, usage string) FlagInfo {
+	return &Flag{name: name, usage: usage, shorthand: shorthand}
+}
+
+type FlagInfo interface {
+	Name() string
+	Usage() string
+	Shorthand() string
+	IsFlag() bool
+
+	// TODO(generics) add a Default() function that returns a generic value
+}
+
+// BindToFlagSet will bind the config struct to a standard library
+// flag set
+func BindToFlagSet(set *flag.FlagSet, resolvers ...FlagInfo) { c.BindToFlagSet(set, resolvers...) }
+
+// BindToFlagSet will bind the config struct to a standard library
+// flag set
+func (c *Config) BindToFlagSet(set *flag.FlagSet, resolvers ...FlagInfo) {
+	resmap := make(map[string]FlagInfo)
+	for _, r := range resolvers {
+		resmap[r.Name()] = r
+	}
+	bindFlags(c.elem, "", set, resmap)
+}
+
+func bindFlags(
+	elem reflect.Value,
+	basename string,
+	set *flag.FlagSet,
+	resolvers map[string]FlagInfo,
+) {
 	if elem.Kind() == reflect.Ptr {
 		elem = elem.Elem()
 	}
@@ -597,13 +639,21 @@ func bindFlags(elem reflect.Value, basename string, set *flag.FlagSet) {
 		if !ok {
 			continue
 		}
-
 		if basename != "" {
 			name = basename + string(nestedFlagDelim) + name
 		}
+		r, ok := resolvers[name]
+		if ok {
+			if !r.IsFlag() {
+				continue
+			}
+			usage = r.Usage()
+			name = r.Name()
+		}
+
 		k := fldtyp.Type.Kind()
 		if k == reflect.Struct {
-			bindFlags(fldval, name, set)
+			bindFlags(fldval, name, set, resolvers)
 			continue
 		} else if k == reflect.Map {
 			// TODO maybe support maps
@@ -627,15 +677,19 @@ func bindFlags(elem reflect.Value, basename string, set *flag.FlagSet) {
 
 // BindToPFlagSet will bind the config object to a pflag set.
 // See https://pkg.go.dev/github.com/spf13/pflag?tab=doc
-func BindToPFlagSet(set *pflag.FlagSet) { c.BindToPFlagSet(set) }
+func BindToPFlagSet(set *pflag.FlagSet, resolvers ...FlagInfo) { c.BindToPFlagSet(set, resolvers...) }
 
 // BindToPFlagSet will bind the config object to a pflag set.
 // See https://pkg.go.dev/github.com/spf13/pflag?tab=doc
-func (c *Config) BindToPFlagSet(set *pflag.FlagSet) {
-	bindPFlags(c.elem, "", set)
+func (c *Config) BindToPFlagSet(set *pflag.FlagSet, resolvers ...FlagInfo) {
+	resmap := make(map[string]FlagInfo)
+	for _, r := range resolvers {
+		resmap[r.Name()] = r
+	}
+	bindPFlags(c.elem, "", set, resmap)
 }
 
-func bindPFlags(elem reflect.Value, basename string, set *pflag.FlagSet) {
+func bindPFlags(elem reflect.Value, basename string, set *pflag.FlagSet, resolvers map[string]FlagInfo) {
 	var (
 		typ = elem.Type()
 		n   = typ.NumField()
@@ -645,24 +699,32 @@ func bindPFlags(elem reflect.Value, basename string, set *pflag.FlagSet) {
 		fldval := elem.Field(i)
 
 		// TODO maybe support maps
-		if k := fldval.Kind(); k == reflect.Map {
-			panic(errors.New("maps not supported for flag binding"))
-		}
 
 		name, shorthand, usage, ok := getFlagInfo(fldtyp)
 		if !ok {
 			// this field was tagged with "notflag"
 			continue
 		}
+		if basename != "" {
+			name = basename + string(nestedFlagDelim) + name
+		}
+		r, ok := resolvers[name]
+		if ok {
+			if !r.IsFlag() {
+				continue
+			}
+			shorthand = r.Shorthand()
+			usage = r.Usage()
+			name = r.Name()
+		}
 
 		// handle nested structs
 		if fldtyp.Type.Kind() == reflect.Struct {
 			// TODO add a struct tag to change this name
-			bindPFlags(fldval, name, set)
+			bindPFlags(fldval, name, set, resolvers)
 			continue
-		}
-		if basename != "" {
-			name = basename + string(nestedFlagDelim) + name
+		} else if k := fldval.Kind(); k == reflect.Map {
+			panic(errors.New("maps not supported for flag binding"))
 		}
 		flg := &pflag.Flag{
 			Name:      name,
@@ -690,6 +752,7 @@ func getFlagInfo(field reflect.StructField) (name, shorthand, usage string, isfl
 
 	name = parts[0]
 	for _, p := range parts[1:] {
+		p = strings.Trim(p, " ")
 		if p == "notflag" {
 			isflag = false
 			return
