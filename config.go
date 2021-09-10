@@ -810,9 +810,6 @@ func (fv *flagValue) Type() string {
 func NewConfigCommand() *cobra.Command { return c.NewConfigCommand() }
 
 func (c *Config) NewConfigCommand() *cobra.Command {
-	var (
-		file, dir, edit, list bool
-	)
 	listpaths := func(prefix ...string) string {
 		buf := bytes.Buffer{}
 		for _, file := range c.allPossibleFiles() {
@@ -830,11 +827,12 @@ func (c *Config) NewConfigCommand() *cobra.Command {
 		Long:    `The config command helps manage program configuration variables.`,
 		Aliases: []string{"conf"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			if file {
+			flags := cmd.Flags()
+			if file, err := flags.GetBool("file"); err == nil && file {
 				fmt.Fprintf(cmd.OutOrStdout(), "%s\n", listpaths())
 				return nil
 			}
-			if dir {
+			if dir, err := flags.GetBool("dir"); err == nil && dir {
 				for _, p := range c.PathsUsed() {
 					cmd.Println(p)
 				}
@@ -842,7 +840,7 @@ func (c *Config) NewConfigCommand() *cobra.Command {
 			}
 
 			f := FileUsed()
-			if edit {
+			if edit, err := flags.GetBool("edit"); err == nil && edit {
 				if f == "" {
 					return errors.New("no config file found")
 				}
@@ -856,7 +854,7 @@ func (c *Config) NewConfigCommand() *cobra.Command {
 				return ex.Run()
 			}
 
-			if list {
+			if list, err := flags.GetBool("list-all"); err == nil && list {
 				for _, f := range c.allPossibleFiles() {
 					cmd.Println(f)
 				}
@@ -879,11 +877,15 @@ func (c *Config) NewConfigCommand() *cobra.Command {
 				fmt.Fprintf(c.OutOrStdout(), "%+v\n", Get(arg))
 			}
 		}})
-	cmd.Flags().BoolVarP(&edit, "edit", "e", false, "edit the config file")
-	cmd.Flags().BoolVarP(&file, "file", "f", false, "print the config files being used")
-	cmd.Flags().BoolVarP(&dir, "dir", "d", false, "print the config directories being used")
-	cmd.Flags().BoolVarP(&list, "list-all", "l", list, "list all possible config files whether they exist or not")
 	return cmd
+}
+
+func SetDefaultCommandFlags(cmd *cobra.Command) {
+	flags := cmd.Flags()
+	flags.BoolP("edit", "e", false, "edit the config file")
+	flags.BoolP("file", "f", false, "print the config files being used")
+	flags.BoolP("dir", "d", false, "print the config directories being used")
+	flags.BoolP("list-all", "l", false, "list all possible config files whether they exist or not")
 }
 
 func init() {
@@ -928,16 +930,6 @@ Additional help topics:
 
 Use "{{.CommandPath}} [command] --help" for more information about a command.{{end}}
 `
-
-func allfiles(dirs, files []string) []string {
-	res := make([]string, 0, len(dirs)+len(files))
-	for _, d := range dirs {
-		for _, f := range files {
-			res = append(res, filepath.Join(d, f))
-		}
-	}
-	return res
-}
 
 func findEditor() (string, error) {
 	editor := GetString("editor")
